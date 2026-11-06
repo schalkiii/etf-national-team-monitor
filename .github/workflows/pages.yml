@@ -1,0 +1,47 @@
+name: Deploy report to Pages
+
+on:
+  schedule:
+    # 北京时间周一~周五 19:10 (UTC 11:10) 重新部署（报告由本地 rebuild 后推送）
+    - cron: "10 11 * * 1-5"
+  workflow_dispatch: {}   # 支持手动触发
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare Pages artifact
+        run: |
+          test -f site/index.html || { echo "::error::site/index.html missing"; exit 1; }
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

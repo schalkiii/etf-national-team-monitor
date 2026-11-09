@@ -1050,7 +1050,10 @@ function renderMain(nDays) {{
     animation: false,
     tooltip: Object.assign({{axisPointer:{{type:'cross'}}}}, tipStyle),
     axisPointer: {{ link: [{{xAxisIndex: 'all'}}] }},
-    legend: {{ data:['合计份额(亿份,左轴)','上证指数(右轴)'], top: 0, left: 60, itemGap: 24,
+    legend: {{ data:[{{name:'合计份额(亿份,左轴)', icon:'rect'}}, {{name:'上证指数(右轴)', icon:'rect'}},
+                    {{name:'当日估算净买入(亿)', icon:'rect'}}, {{name:'全市场总净申购(对照)', icon:'rect'}},
+                    {{name:'累计估算(亿,右轴)', icon:'rect'}}],
+      top: 0, left: 60, itemGap: 18, itemWidth: 14,
       textStyle:{{color:'#5d6d7e', fontSize:11}} }},
     grid: [
       {{ left: 64, right: 64, top: 52, height: '30%' }},

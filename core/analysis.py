@@ -56,16 +56,17 @@ def _margin_chg(con, date: str) -> float | None:
     """融资余额 5 日变化%。表缺失或数据不足返回 None（优雅降级,L5 灰灯）。"""
     try:
         rows = con.execute(
-            "SELECT date, close FROM margin_daily WHERE date<=? ORDER BY date DESC LIMIT 6", (date,)
+            "SELECT date, fin_balance_yi FROM margin_daily WHERE date<=? AND fin_balance_yi IS NOT NULL"
+            " ORDER BY date DESC LIMIT 6", (date,)
         ).fetchall()
     except sqlite3.OperationalError:
         return None
     if len(rows) < 6:
         return None
     latest, oldest = rows[0], rows[-1]
-    if not oldest["close"]:
+    if not oldest["fin_balance_yi"]:
         return None
-    return (latest["close"] / oldest["close"] - 1.0) * 100.0
+    return (latest["fin_balance_yi"] / oldest["fin_balance_yi"] - 1.0) * 100.0
 
 
 def _invalid_delta_set(con: sqlite3.Connection) -> set[tuple[str, str]]:

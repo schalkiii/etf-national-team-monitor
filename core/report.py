@@ -57,12 +57,12 @@ def run_daily(con: sqlite3.Connection, push: bool = False) -> dict:
     return result
 
 
-def generate_report(con: sqlite3.Connection, date: str | None = None) -> str:
+def generate_report(con: sqlite3.Connection, date: str | None = None, out_dir=None) -> str:
     if not date:
         date = _latest_data_date(con)
     signals = compute_signals_for_date(con, date)
     combined = combined_core_description(con, date)
-    return str(_write_html(con, date, signals, combined))
+    return str(_write_html(con, date, signals, combined, out_dir=out_dir))
 
 
 def _invalid_delta_join(con: sqlite3.Connection) -> tuple[set[tuple[str, str]], bool]:
@@ -268,7 +268,9 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
                 total_flow += (s - prev_map[code][0]) / 1e8 * px
         total_series.append(total_flow)
         date_series.append(d1)
-    # 活跃日判定: |总净申购| ≥ 自身历史 90 分位 或 (当日为强护盘语境=指数跌>1% 且净申购>0)
+    # 活跃日判定（行为模式约束：量级 + 语境缺一不可,拒绝把牛市抢筹标成国家队）:
+    #   买入日: |总净申购|≥90分位 且 当日指数下跌（回撤期放量）; 或 强护盘语境(指数跌>1% 且净申购>0)
+    #   卖出日: 总净赎回≥90分位 且 当日指数上涨（反弹兑现语境）
     abs_series = [abs(v) for v in total_series]
     p90 = None
     if len(abs_series) >= 60:
@@ -282,14 +284,13 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
         if prev_c and cur_c:
             idx_chg = (cur_c / prev_c - 1) * 100
         active = False
-        if tf > 0:
-            if p90 is not None and abs(tf) >= p90:
-                active = True
-            if idx_chg is not None and idx_chg <= -1.0 and tf > 0:
-                active = True
-        elif tf < 0 and p90 is not None and abs(tf) >= p90:
-            # 大额净赎回日: 量级达 90 分位才标「疑似国家队撤退」(绿色卖出柱,θ 同乘)
-            active = True
+        if tf > 0 and idx_chg is not None:
+            if p90 is not None and abs(tf) >= p90 and idx_chg < 0:
+                active = True  # 回撤期放量申购
+            if idx_chg <= -1.0:
+                active = True  # 强护盘语境(跌>1%仍净申购)
+        elif tf < 0 and idx_chg is not None and idx_chg > 0 and p90 is not None and abs(tf) >= p90:
+            active = True  # 反弹日大额净赎回(疑似撤退兑现)
         nt_flow = round(tf * theta_active, 1) if active else 0.0
         nt_total.append(round(tf, 1))
         nt_daily.append(round(nt_flow, 1))
@@ -388,7 +389,10 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
         "nt": {"daily": nt_daily_a, "cum": nt_cum_a, "total": nt_total_a,
                "active": nt_active_flags, "dates": dates_out,
                "theta": nt_theta_used, "n_active": sum(nt_active_flags), "events": events_out,
-               "n_sell": sum(1 for v in nt_daily if v < 0)},
+               "n_buy": sum(1 for v in nt_daily if v > 0),
+               "n_sell": sum(1 for v in nt_daily if v < 0),
+               "theta_n_anchor_periods": len(active_thetas),
+               "last_active": next((d for d, v in reversed(list(zip(date_series, nt_daily))) if v != 0), None)},
         "resonance_days": resonance_days,
         "landing": landing, "landing_anchor": landing_anchor,
         "heatmap": heatmap, "sentiment": sentiment, "coverage": coverage,
@@ -435,7 +439,7 @@ def _overseas_snapshot(con: sqlite3.Connection) -> dict:
     return out
 
 
-def _write_html(con, date: str, signals, combined) -> Path:
+def _write_html(con, date: str, signals, combined, out_dir=None) -> Path:
     gen_time = datetime.now().strftime("%Y-%m-%d %H:%M")
     cd = _fetch_chart_data(con, date)
     # 当日核心层五灯汇总（顶部灯组,核心标的灯投票）
@@ -486,7 +490,24 @@ def _write_html(con, date: str, signals, combined) -> Path:
     nt_theta = nt.get("theta")
     nt_last = nt["daily"][-1] if nt.get("daily") else None
     nt_cum_last = nt["cum"][-1] if nt.get("cum") else None
+    # 卡片显示口径: 当日非活跃日时展示最近活跃日估算(标日期),避免误导性的 "+0 亿"
+    nt_last_active_date = nt.get("last_active")
+    if (nt_last or 0) == 0 and nt_last_active_date:
+        d_idx = {d: i for i, d in enumerate(nt.get("dates", []))}
+        ai = d_idx.get(nt_last_active_date)
+        if ai is not None:
+            nt_card_val = nt["daily"][ai]
+            nt_card_label = f"最近活跃日 {nt_last_active_date}"
+        else:
+            nt_card_val, nt_card_label = nt_last, "当日"
+    else:
+        nt_card_val, nt_card_label = nt_last, "当日"
     theta_note = (f"θ={nt_theta}（核心宽基锚点均值）" if nt_theta is not None else "θ 未标定（无有效锚点）")
+    if nt_theta is not None:
+        # 诚实披露 θ 样本量: 锚点区间极少时不能自称"均值"
+        theta_n = nt.get("theta_n_anchor_periods")
+        theta_note = (f"θ={nt_theta}（{theta_n} 个建仓期锚点均值）" if theta_n
+                      else f"θ={nt_theta}（单一建仓期锚点,样本待补）")
     nt_head = (f"国家队昨日估算净{'增持' if (nt_last or 0) >= 0 else '减持'} <b>{abs(nt_last):.0f} 亿</b>"
                f"（窗口累计 {nt_cum_last:+,.0f} 亿）") if nt_last is not None else "国家队估算数据不足"
 
@@ -788,8 +809,8 @@ tr:hover td {{ background: var(--paper-2); }}
     </div>
     <div class="gauge">
       <div class="label">国家队估算净买入（活跃日口径）</div>
-      <div class="value">{('+' + f"{nt_last:,.0f}") if (nt_last or 0) >= 0 else f"{nt_last:,.0f}"}<span style="font-size:14px;color:var(--ink-3)"> 亿</span></div>
-      <div class="sub">{theta_note} · 累计 {nt_cum_last:+,.0f} 亿</div>
+      <div class="value">{('+' + f"{nt_card_val:,.0f}") if (nt_card_val or 0) >= 0 else f"{nt_card_val:,.0f}"}<span style="font-size:14px;color:var(--ink-3)"> 亿</span></div>
+      <div class="sub">{theta_note} · 累计 {nt_cum_last:+,.0f} 亿 · {nt_card_label}</div>
     </div>
     <div class="gauge">
       <div class="label">上证指数距年线</div>
@@ -827,7 +848,7 @@ tr:hover td {{ background: var(--paper-2); }}
     <span class="range-btn" data-range="250" onclick="setRange(this)">近1年</span>
     <span class="range-btn" data-range="120" onclick="setRange(this)">近半年</span>
   </div>
-  <p style="font-size:14px; margin:8px 0 10px;">昨日国家队估算净{'增持' if (nt_last or 0) >= 0 else '减持'} <b>{abs(nt_last):.0f} 亿</b>（{nt_days_total} 个交易日中 {nt_n_active} 天标记为国家队活跃，窗口累计 {nt_cum_last:+,.0f} 亿）。</p>
+  <p style="font-size:14px; margin:8px 0 10px;">最近活跃日（{nt_last_active_date or '—'}）国家队估算净{'增持' if (nt_card_val or 0) >= 0 else '减持'} <b>{abs(nt_card_val or 0):.0f} 亿</b>（{nt_days_total} 个交易日中 {nt_n_active} 天标记为国家队活跃，窗口累计 {nt_cum_last:+,.0f} 亿）。</p>
   <div id="mainChart" class="chart"></div>
   <p class="footnote">上图左轴：八只核心宽基合计份额（亿份，交易所登记值）；右轴：上证指数；绿色底带为历史「机会共振」日；<b>紫色竖虚线为官宣/护盘事件</b>（如 2026-07-20 汇金/国新/诚通官宣增持、07-13 急跌保卫战、07-16 科创杀跌日，悬停可看日期）。下图柱：当日估算净买卖——<b>红柱为买入、绿柱为卖出</b>（卖出=总净赎回达历史 90 分位的「疑似撤退日」，同样 ×θ 折算）；灰色对照柱为全市场总净申购（未归因）；紫色累计线（右轴）为活跃日估算的逐日累加，<b>可升可降</b>——净卖出日会下拉累计线，反映的是估算净买入存量的变化，仍不代表当前持仓市值（θ 为区间估计）。份额在指数下行段阶梯式跳增，是一级市场大额申购的直接足迹。估算口径：当日核心宽基总净申购 × θ（θ 由季报前十大持有人锚点标定，建仓期均值 {nt_theta}）。仅当 |总净申购| 位于历史 90 分位以上、或指数单日跌幅超过 1% 且出现净申购时，才标记为「国家队活跃日」并折算；其余交易日计为零，不冒充。</p>
 </section>
@@ -1306,6 +1327,7 @@ window.addEventListener('resize', function(){{ mainChart.resize(); structChart.r
     # echarts 内联注入（f-string 无法直接嵌入含大量 {} 的 JS 源码,用占位符替换）
     html = html.replace("/*__ECHARTS_INLINE__*/", echarts_src)
 
-    out = REPORT_DIR / f"etf_ntm_{date}.html"
+    out = Path(out_dir) if out_dir else REPORT_DIR
+    out = out / f"etf_ntm_{date}.html"
     atomic_write(out, html.encode("utf-8"))
     return out

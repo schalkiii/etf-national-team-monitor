@@ -112,13 +112,17 @@ def check_login() -> bool:
 
 
 def publish(title: str, body: str, images: list[Path], public: bool) -> dict:
-    """调 xiaohongshu-mcp MCP 工具发布图文。"""
+    """调 xiaohongshu-mcp MCP 工具发布图文。
+
+    visibility 参数为中文枚举（2026-11-09 实测）：
+    公开可见 / 仅自己可见 / 仅互关好友可见
+    """
     arguments = {
         "title": title,
         "content": body,
         "images": [str(p) for p in images],
         "tags": TAGS,
-        "visibility": "public" if public else "private",
+        "visibility": "公开可见" if public else "仅自己可见",
     }
     return _mcp_call("publish_content", arguments, timeout=180)
 

@@ -89,10 +89,29 @@ git add site/index.html && git commit && git push       # 3. 推送触发 workfl
 飞书推送：设置环境变量 `ETF_NTM_FEISHU_WEBHOOK`（严禁硬编码/写日志），
 相邻有效运行间方向翻转才推送（webhook 状态机）。
 
+## 发布（小红书 / 公众号）
+
+报告图表可自动发布到社交平台，发布链路（2026-11-09 打通）：
+
+```bash
+python scripts/snapshot_charts.py    # ① 报告 HTML → 7 张图表 PNG（Edge headless + marker 像素定位）
+python scripts/publish_xhs.py        # ② 组装文案 → xiaohongshu-mcp 发布（默认仅自己可见试发）
+python scripts/publish_xhs.py --public   # ③ 验证无误后正式公开发布
+```
+
+- **小红书（全自动）**：xiaohongshu-mcp（部署于 `~/.etf-ntm/xhs-mcp/`，HTTP 端点
+  `127.0.0.1:18060`）。首次使用需运行 `xiaohongshu-login-windows-amd64.exe` 扫码
+  登录（cookies 落地后长期有效）。标题 ≤20 字、正文 ≤1000 字由脚本自动截断合规。
+- **公众号（半自动）**：个人订阅号 API 只能建草稿不能自动发布（微信官方限制）。
+  wenyan-mcp 已配置于 `~/.workbuddy/mcp.json`，填入 WECHAT_APP_ID/SECRET 并
+  IP 白名单后可自动推草稿，最后一步在公众号后台手动点发布。
+- 截图脚本技术细节（Playwright 三坑、Edge CLI 定型）见 `scripts/snapshot_charts.py` 文件头注释。
+
 ## 数据位置
 
 - 数据库：`~/.etf-ntm/etf_ntm.db`（SQLite WAL）
 - 报告：`~/.etf-ntm/reports/etf_ntm_YYYY-MM-DD.html`
+- 图表素材：`~/.etf-ntm/reports/charts/`（发布用 PNG,自动生成勿手编）
 
 ## 免责声明
 

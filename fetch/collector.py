@@ -139,7 +139,7 @@ def detect_splits_and_adjust(con: sqlite3.Connection, code: str) -> list[dict]:
 
 
 def rebuild_all(con: sqlite3.Connection) -> dict:
-    """一键重建（学 A-Resonance 承重顺序）：日历 → K线 → 份额 → 复权 → 融资余额。"""
+    """一键重建（学 A-Resonance 承重顺序）：日历 → K线 → 份额 → 复权 → 融资余额 → 锚点。"""
     n_cal = rebuild_calendar(con, lookback_days=2600)
     n_kline = backfill_klines(con)
     share_stats = backfill_shares(con)
@@ -148,7 +148,11 @@ def rebuild_all(con: sqlite3.Connection) -> dict:
         splits.extend(detect_splits_and_adjust(con, code))
     from fetch.margin import backfill_margin
     n_margin = backfill_margin(con, months=48)
-    return {"calendar": n_cal, "klines": n_kline, "shares": share_stats, "splits": splits, "margin_rows": n_margin}
+    # 已知锚点幂等 seed（core/anchor_data.py：新锚点录入 ANCHORS 后 rebuild 即生效）
+    from core.anchor_data import seed_anchors
+    n_anchor = seed_anchors(con)
+    return {"calendar": n_cal, "klines": n_kline, "shares": share_stats, "splits": splits,
+            "margin_rows": n_margin, "anchors_seeded": n_anchor}
 
 
 def daily_incremental(con: sqlite3.Connection, days: int = 5) -> dict:

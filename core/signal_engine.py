@@ -143,8 +143,13 @@ def resonance_verdict(lights: list[LightEvidence]) -> tuple[str, int, int]:
 
 
 def apply_confidence_rules(base_conf: str, net_flow_yi: float | None,
-                           lights: list[LightEvidence], reasons: list[str]) -> str:
-    """置信度只降不升（学 etf-tracker 同构规则）。"""
+                           lights: list[LightEvidence], reasons: list[str],
+                           direction: Direction = Direction.NEUTRAL) -> str:
+    """置信度只降不升（学 etf-tracker 同构规则）。
+
+    direction 参数实现「空头封顶」红线（AGENTS.md 第 2 条）：
+    SHORT 信号置信度不超过「中」——回测已证明空头高置信档不可靠
+    （SHORT|中 20 日胜率仅 31%，README 回测章节）。"""
     order = ["低", "中", "高"]
     conf = base_conf
     idx = order.index(conf)
@@ -154,20 +159,17 @@ def apply_confidence_rules(base_conf: str, net_flow_yi: float | None,
         if idx > 0:
             idx -= 1
 
+    # 空头封顶：SHORT 不超过中（红线规则,先于其他规则执行）
+    if direction == Direction.SHORT and idx > 1:
+        idx = 1
+        reasons.append("空头封顶:SHORT方向置信度不超过中(回测胜率不支持高置信空头)")
     # 耗尽闸门：|净流|≥300亿 命中率塌陷 → 封顶低
     if net_flow_yi is not None and abs(net_flow_yi) >= 300:
         idx = 0
         reasons.append(f"耗尽闸门:|净流|{abs(net_flow_yi):.0f}亿≥300亿,历史命中率塌陷,封顶低置信")
-    # 空头封顶：SHORT 不超过中
-    # (方向在 report 层结合,此处只处理灯上下文)
     # 灯数据缺失(灰灯为主) → 降一级
     gray = sum(1 for l in lights if l.color == LightColor.GRAY)
     if gray >= 4:
         demote()
         reasons.append(f"灰灯{gray}盏:证据不足,降一级")
     return order[idx]
-
-
-def combined_signal(net_flow: float | None, direction_hint: Direction) -> Direction:
-    """BLOCKED 严禁降级为 NEUTRAL；样本不足走 BLOCKED。"""
-    return direction_hint

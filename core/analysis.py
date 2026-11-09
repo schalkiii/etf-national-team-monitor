@@ -3,6 +3,8 @@
 把 core 纯函数与 store 组装起来的编排层（学 A-Resonance scheduler 组装哲学）。"""
 from __future__ import annotations
 
+from datetime import date as _date  # noqa: F401  (模块级导入,差分间隔计算用)
+
 import json
 import sqlite3
 
@@ -10,7 +12,7 @@ from core.config import (
     COMBINED_5D_ELEVATED, COMBINED_5D_LARGE, COMBINED_5D_REDEEM,
     CORE_CODES, ETF_POOL,
 )
-from core.models import Direction, FlowSource, LightColor, LightEvidence, Signal
+from core.models import Direction, LightColor, LightEvidence, Signal
 from core.signal_engine import (
     apply_confidence_rules, describe_flow, detect_anomaly,
     light_index_drawdown, light_margin, light_price_position,
@@ -102,7 +104,6 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
         delta_shares_yi = None
         if len(share_rows) >= 2 and share_rows[-1]["date"] == cur["date"]:
             # 前一有效点距当日 >10 天（跨无效区）→ Δshares 不可信,弃用不冒充
-            from datetime import date as _date
             gap_days = (_date.fromisoformat(share_rows[-1]["date"])
                         - _date.fromisoformat(share_rows[-2]["date"])).days
             if gap_days <= 10:
@@ -112,7 +113,6 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
         net_flow_yi, flow_source = describe_flow(delta_shares_yi, cur["close"])
 
         flow_hist = []
-        from datetime import date as _date
         for i in range(1, len(share_rows)):
             a, b = share_rows[i - 1], share_rows[i]
             if a["shares"] and b["shares"]:
@@ -148,7 +148,7 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
 
         base = "高" if max(green, red) >= 4 else ("中" if resonance != "中性" else "低")
         reasons = []
-        conf = apply_confidence_rules(base, net_flow_yi, lights, reasons)
+        conf = apply_confidence_rules(base, net_flow_yi, lights, reasons, direction=direction)
 
         signals.append(Signal(
             code, date, direction, conf,

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-
-
 class FlowSource(str, Enum):
     """口径分级（学 etf-tracker）：估算值永不冒充真实值。"""
     REAL_DAILY = "真实锚定-每日"       # 交易所每日份额(T+1)
@@ -25,21 +23,6 @@ class LightColor(str, Enum):
     RED = "红"    # 风险/出货
     GREEN = "绿"  # 机会/吸筹
     GRAY = "灰"   # 中性
-
-
-@dataclass
-class EtfDailyRow:
-    """etf_daily 表行：K 线 + 当日份额（份额为空表示未采集）。"""
-    code: str
-    date: str            # YYYY-MM-DD
-    open: float | None = None
-    close: float | None = None
-    high: float | None = None
-    low: float | None = None
-    volume: float | None = None    # 手
-    amount: float | None = None    # 元
-    shares: float | None = None    # 份(交易所口径,未复权原始值)
-    adjust_factor: float = 1.0     # 份额复权因子(拆分探测)
 
 
 @dataclass

@@ -113,8 +113,3 @@ def seed(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
-
-def core_codes_pair() -> tuple[str, str]:
-    """测试用的两只核心代码（种子数据覆盖 510300/510500，均属 CORE_CODES）。"""
-    assert "510300" in CORE_CODES and "510500" in CORE_CODES
-    return "510300", "510500"

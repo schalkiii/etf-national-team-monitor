@@ -42,11 +42,13 @@ python scripts/daily_job.py   # 每日自动化入口（含飞书推送分支）
 | 沪市 ETF 份额 | akshare `fund_etf_scale_sse(date)` | 交易所官方,可回溯任意历史日 |
 | 深市 ETF 份额 | akshare `fund_scale_daily_szse(start,end)` | 交易所官方,区间上限约185自然日,超限自动分段 |
 | K 线/成交额 | 腾讯 `web.ifzq.gtimg.cn` | ETF 与指数日线 |
-| 季报锚点 | 基金定期报告前十大持有人 | 手工录入 `core/anchor_data.py` |
+| 融资余额 | 交易所两融日度披露（akshare） | `margin_daily` 表,2022-11 起 |
+| 季报锚点 | 基金定期报告前十大持有人 | 手工录入 `core/anchor_data.py` 的 ANCHORS 后跑 `cli.py rebuild`（`seed_anchors` 幂等 upsert）；或运行时 `calibration.upsert_anchor` |
 
 ## 核心设计
 
 - **三层信号**：描述层（5日合计±标签）→ MAD 稳健 3σ 异常 → 分位数五灯共振（阈值从数据学出）
+- **算法分层**：国家队估算为纯函数 `core/nt_estimate.py`（活跃日判定/θ_active/网格对齐，74+ 测试直接断言）；报告数据在 `core/report.py`；HTML 模板在 `core/report_html.py`
 - **报告图表 v2**：
   - 核心宽基合计份额 vs 上证指数**双轴叠加**（多周期切换 + dataZoom）
   - 单 ETF 详情：K 线 + 指数对照（右轴）+ **份额日增量柱**（复权后,拆分日已处理）
@@ -60,14 +62,29 @@ python scripts/daily_job.py   # 每日自动化入口（含飞书推送分支）
 
 ## 回测实证（250 交易日 / 4500 信号，2026-11-06）
 
+> 口径说明：回测基于三层信号（direction/confidence，`signal_engine`），该引擎自
+> 2026-11-06 回测后未改动，结论仍适用。2026-11-09 活跃日判定加语境约束只影响
+> 报告「国家队估算」（图 1）口径，与回测信号无关。
+
 - **机会共振信号后 20 日平均 -3.3%，胜率 38%** → 护盘期买入=接下落的刀，左侧布局需分批
-- **SHORT|中 20 日胜率仅 31%** → 空头封顶纪律有数据支撑（etf-tracker 结论复现）
+- **SHORT|中 20 日胜率仅 31%** → 空头封顶纪律有数据支撑（etf-tracker 结论复现，
+  已实现于 `signal_engine.apply_confidence_rules` 的 direction 参数）
 - **LONG|高（24例）20 日 -20.2%** → 高确信多头信号集中在恐慌顶点，是唯一要避免的信号档
 - 事件研究：7/13 百股跌停后核心宽基份额 +38%，官方护盘足迹清晰可测
 
 ## 部署
 
 每日自动化：WorkBuddy automation（每日 19:05）调用 `python scripts/daily_job.py`，绝对路径。
+
+GitHub Pages 只静态部署 `site/` 目录、**不重新构建报告**。改代码后更新线上的三步：
+
+```bash
+python cli.py report                                    # 1. 本地生成最新报告
+cp ~/.etf-ntm/reports/etf_ntm_*.html site/index.html    # 2. 覆盖部署快照（Git Bash 路径）
+git add site/index.html && git commit && git push       # 3. 推送触发 workflow（site/** 变更即部署）
+```
+
+忘记第 2 步 = 线上数据静默过期（无任何提示）。
 
 飞书推送：设置环境变量 `ETF_NTM_FEISHU_WEBHOOK`（严禁硬编码/写日志），
 相邻有效运行间方向翻转才推送（webhook 状态机）。

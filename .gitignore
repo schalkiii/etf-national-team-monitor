@@ -4,3 +4,7 @@ __pycache__/
 *.db
 site/*
 !site/index.html
+# git push 诊断等临时调试输出
+push_err.txt
+push_out.txt
+sysgit_out.txt

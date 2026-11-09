@@ -31,4 +31,12 @@ python cli.py rebuild && python cli.py report && python cli.py calibrate && pyth
 - 深交所份额接口区间上限约 185 自然日（2026-11-06 实测），collector 已分段处理
 - 510310/510050/512100/563360 历史上有拆分/折算,复权因子已写入
 - 指数成交额：上证 sh000001 + 深成 sz399001 合计近似两市
-- margin_daily 表尚未接数据源,L5 融资杠杆灯暂为灰灯（优雅降级）
+- margin_daily 已接数据源（2022-11 起,~954 行），L5 融资杠杆灯正常工作；
+  `_margin_chg` 读取 `fin_balance_yi` 列（表缺失时优雅降级灰灯）
+- 空头封顶红线已代码实现：`signal_engine.apply_confidence_rules(direction=...)`，
+  SHORT 置信度封顶「中」，封顶理由写入 reasons 链
+- 国家队估算算法在 `core/nt_estimate.py`（纯函数,可直接测试）；
+  report.py 只做取数与装配；HTML 模板在 `core/report_html.py`
+- 锚点录入：把新报告期数据写入 `core/anchor_data.py` 的 ANCHORS 后跑
+  `python cli.py rebuild`，`seed_anchors` 幂等 upsert 生效；或手工
+  `calibration.upsert_anchor`

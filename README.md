@@ -96,7 +96,7 @@ git add site/index.html && git commit && git push       # 3. 推送触发 workfl
 ```bash
 python scripts/snapshot_charts.py    # ① 报告 HTML → 7 张图表 PNG（Edge headless + marker 像素定位）
 python scripts/publish_xhs.py        # ② 组装文案 → xiaohongshu-mcp 发布（默认仅自己可见试发）
-python scripts/publish_xhs.py --public   # ③ 验证无误后正式公开发布
+python scripts/publish_xhs.py --public   # ③ App 内人工验收图片无误后，正式公开发布
 ```
 
 - **小红书（全自动）**：xiaohongshu-mcp（部署于 `~/.etf-ntm/xhs-mcp/`，HTTP 端点
@@ -106,6 +106,26 @@ python scripts/publish_xhs.py --public   # ③ 验证无误后正式公开发布
   wenyan-mcp 已配置于 `~/.workbuddy/mcp.json`，填入 WECHAT_APP_ID/SECRET 并
   IP 白名单后可自动推草稿，最后一步在公众号后台手动点发布。
 - 截图脚本技术细节（Playwright 三坑、Edge CLI 定型）见 `scripts/snapshot_charts.py` 文件头注释。
+
+### 小红书方法学（2026-11-09 首发实测沉淀）
+
+1. **先试发后公开**：默认 `visibility=仅自己可见`，在 App 里人工验收图片与文案，
+   确认无误才 `--public`。visibility 参数是**中文枚举**（公开可见/仅自己可见/
+   仅互关好友可见），英文值会被拒。
+2. **没有编辑/删除 API**：MCP 工具只有 `publish_content` / `check_login_status` /
+   `get_my_profile`（2026-11-09 实测）。**更新已发笔记的图片 = 重发一篇新笔记**，
+   旧笔记在 App 里手动删。
+3. **截图必须含标题**：读者在小红书看不到网页章节结构，每张 PNG 必须自带
+   「图 N + 标题」。实现：marker outline 打到「标题+按钮+图表」的包裹层而非
+   图表容器（见 `snapshot_charts.py` 的 `WRAPPER_SELECTOR` + `WRAP_JS`）。
+4. **截图质量验证走像素**：发布前对每张 PNG 做四边贴边扫描（背景色差阈值），
+   轴标签/图例溢出容器会在图缘留下文字像素。注意 CDP `storage.traverse` 量
+   包围盒会把未渲染的隐藏元素（axisPointer 等）算进来产生假阳性，**以像素为准**。
+5. **窗口默认最短档**：主图 120 日、K 线 120 日、轮动 20 日、热力 60 日、两融
+   120 日——社交读者不需要全历史，全历史会稀释近期信号且加大文字渲染密度。
+6. **echarts 图例配色坑**：某系列的 `itemStyle.color` 用显式常量时不消耗调色板
+   名额，后续系列会错位取色（图例灰、线条紫对不上）。多系列图凡手工指定过
+   一个系列颜色，其余系列全部显式指定，不依赖 palette 自动分配。
 
 ## 数据位置
 

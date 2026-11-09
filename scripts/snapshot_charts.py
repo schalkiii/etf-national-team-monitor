@@ -39,6 +39,8 @@ from core.config import REPORT_DIR  # noqa: E402
 
 # 图表容器 → (输出文件名, marker 颜色 RGB)
 # 颜色为高饱和荧光色，报告浅底深字配色下不存在，扫描零误报
+# 截图含标题：marker 打在「标题+按钮+图表」的包裹容器上（见 inject_markers），
+# 结构/轮动为双列内嵌容器，marker 打在外层 div（含 h3 小标题）。
 CHART_TARGETS: list[tuple[str, str, tuple[int, int, int]]] = [
     ("mainChart", "01_main", (255, 0, 254)),      # 主图：国家队估算+份额+指数
     ("etfChart", "02_etf", (0, 255, 254)),        # 单基金详情
@@ -49,14 +51,19 @@ CHART_TARGETS: list[tuple[str, str, tuple[int, int, int]]] = [
     ("sentChart", "07_sent", (127, 0, 255)),      # 市场热度
 ]
 
+# 截图时把 marker 打到哪个包裹元素（含标题）：
+#   默认向上找 section 的 sec-head 之后的整个内容块；对双列小图
+#   (struct/rotation) 打在各自 grid 列 div（含 h3 小标题）。
+# CSS 选择器：从图表容器出发,closest() 向上找包裹层。
+WRAPPER_SELECTOR: dict[str, str] = {
+    "structChart": "#g-structure .grid2 > div:first-child",
+    "rotationChart": "#g-structure .grid2 > div:last-child",
+}
+
 VIEWPORT_W = 740        # 与报告 CSS 容器宽度匹配（body max-width 703 + 边距）
 PAGE_H_DEFAULT = 12000  # 默认页高（实测 ~7400,分档递增防截断;Edge 上限约 16384）
 SCALE = 2               # force-device-scale-factor
 MARKER_W = 6            # outline 宽度(px)，裁剪时内缩
-
-MARKER_CSS_TMPL = (
-    "#{cid}{{outline:{w}px solid rgb({r},{g},{b});}}"
-)
 
 
 def find_edge() -> str:
@@ -82,13 +89,63 @@ def latest_report() -> Path:
 
 
 def inject_markers(html: str) -> str:
-    """给每个图表容器注入独特颜色 outline CSS（outline 不占布局空间）。"""
-    rules = "\n".join(
-        MARKER_CSS_TMPL.format(cid=cid, w=MARKER_W, r=c[0], g=c[1], b=c[2])
-        for cid, _, c in CHART_TARGETS
-    )
-    style = f"<style>{rules}</style>"
-    return html.replace("</head>", style + "</head>", 1)
+    """给每个截图目标注入独特颜色 outline CSS（outline 不占布局空间）。
+
+    marker 打在包裹层（含标题/按钮）而非图表容器本身：
+      - 默认：图表所在 section 内从 sec-head 到图表容器的整块
+        （实现：给 section 加 outline 会带上 footnote,太长;改为
+        给「sec-head 的父 section 内、图表的直接父 div」打 marker,
+        该 div 已含 sec-head + 按钮行 + 图表容器）。
+      - struct/rotation：双列 grid 的列 div（含 h3 小标题）。
+    """
+    # 各图表的 marker 挂载元素选择器：
+    # main/etf/margin/heat/sent 图表容器的直接父 div 恰好含 sec-head+按钮+图
+    # （section 结构: sec-head div + 按钮 div + <div id=xxChart> + footnote p,
+    #   图表直接父级是 section,故需按 section 打 marker 再在裁剪时剔除 footnote? )
+    # 实测结构：section > (div.sec-head, div(按钮), div#chart, p.footnote)
+    # → marker 打在 section 上会把 footnote 也截进去。因此对这五个图,
+    #   用 JS 在加载时把 sec-head+按钮+chart 包进一个新 div 再打 marker;
+    #   struct/rotation 直接打在 grid 列 div 上（无 footnote 混入）。
+    rules = []
+    for cid, _, color in CHART_TARGETS:
+        sel = WRAPPER_SELECTOR.get(cid)
+        if sel:
+            rules.append(
+                f"{sel}{{outline:{MARKER_W}px solid rgb({color[0]},{color[1]},{color[2]});}}")
+        else:
+            # 通用：注入 JS 包裹脚本（见 WRAP_JS）后,包div获得 id=wrap_<cid>
+            rules.append(
+                f"#wrap_{cid}{{outline:{MARKER_W}px solid rgb({color[0]},{color[1]},{color[2]});}}")
+    style = "<style>" + "\n".join(rules) + "</style>"
+    return html.replace("</head>", style + WRAP_JS + "</head>", 1)
+
+
+# 通用图(main/etf/margin/heat/sent)：运行时把 sec-head、按钮行、图表容器
+# 包进 #wrap_<cid>（不含 footnote p），结构小图无需包裹。
+WRAP_JS = """<script>
+document.addEventListener('DOMContentLoaded', function(){
+  // 注意: 本脚本注入在 <head> 内,同步执行时 body 尚未解析,
+  // getElementById 全 null —— 必须挂 DOMContentLoaded
+  ['mainChart','etfChart','marginChart','heatChart','sentChart'].forEach(function(cid){
+    var chart = document.getElementById(cid);
+    if (!chart) return;
+    var section = chart.closest('section');
+    if (!section) return;
+    var wrap = document.createElement('div');
+    wrap.id = 'wrap_' + cid;
+    var anchor = section.querySelector('.sec-head');
+    if (!anchor) { return; }
+    section.insertBefore(wrap, anchor);
+    var node = anchor;
+    while (node && node !== chart) {
+      var next = node.nextSibling;
+      wrap.appendChild(node);
+      node = next;
+    }
+    wrap.appendChild(chart);
+  });
+});
+</script>"""
 
 
 def edge_screenshot(edge: str, html_path: Path, out_png: Path, page_h: int) -> None:

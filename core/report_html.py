@@ -409,10 +409,10 @@ tr:hover td {{ background: var(--paper-2); }}
     <span class="sec-note">上：份额 vs 指数 &middot; 下：当日估算 &middot; 竖虚线：官宣/护盘事件</span>
   </div>
   <div>
-    <span class="range-btn active" data-range="all" onclick="setRange(this)">全部</span>
+    <span class="range-btn" data-range="all" onclick="setRange(this)">全部</span>
     <span class="range-btn" data-range="520" onclick="setRange(this)">近2年</span>
     <span class="range-btn" data-range="250" onclick="setRange(this)">近1年</span>
-    <span class="range-btn" data-range="120" onclick="setRange(this)">近半年</span>
+    <span class="range-btn active" data-range="120" onclick="setRange(this)">近半年</span>
   </div>
   <p style="font-size:14px; margin:8px 0 10px;">最近活跃日（{nt_last_active_date or '—'}）国家队估算净{'增持' if (nt_card_val or 0) >= 0 else '减持'} <b>{abs(nt_card_val or 0):.0f} 亿</b>（{nt_days_total} 个交易日中 {nt_n_active} 天标记为国家队活跃，窗口累计 {nt_cum_last:+,.0f} 亿）。</p>
   <div id="mainChart" class="chart"></div>
@@ -438,8 +438,8 @@ tr:hover td {{ background: var(--paper-2); }}
   </div>
   <div>
     <span style="font-size:12.5px; color:var(--ink-3); margin-right:8px;">轮动窗口</span>
-    <span class="range-btn rot-btn active" data-rot="60" onclick="setRot(this)">60日</span>
-    <span class="range-btn rot-btn" data-rot="20" onclick="setRot(this)">20日</span>
+    <span class="range-btn rot-btn" data-rot="60" onclick="setRot(this)">60日</span>
+    <span class="range-btn rot-btn active" data-rot="20" onclick="setRot(this)">20日</span>
     <span class="range-btn rot-btn" data-rot="120" onclick="setRot(this)">120日</span>
     <span class="range-btn rot-btn" data-rot="250" onclick="setRot(this)">250日</span>
   </div>
@@ -487,6 +487,12 @@ tr:hover td {{ background: var(--paper-2); }}
     <span class="sec-no">图 4</span><h2 class="sec-title">两融余额：杠杆出清的背景</h2>
     <span class="sec-note">绝对值口径 &middot; 快速变化率见五灯「融资杠杆」</span>
   </div>
+  <div>
+    <span style="font-size:12.5px; color:var(--ink-3); margin-right:8px;">时间窗口</span>
+    <span class="range-btn margin-btn active" data-margin="120" onclick="setMargin(this)">近半年</span>
+    <span class="range-btn margin-btn" data-margin="250" onclick="setMargin(this)">近1年</span>
+    <span class="range-btn margin-btn" data-margin="all" onclick="setMargin(this)">全部</span>
+  </div>
   <div id="marginChart" class="chart"></div>
   <p class="footnote">融资余额快速下降记录杠杆仓位被强平出清；回升则记录杠杆回归。国家队申购历史上与指数回撤期相伴。</p>
 </section>
@@ -498,8 +504,8 @@ tr:hover td {{ background: var(--paper-2); }}
   </div>
   <div>
     <span style="font-size:12.5px; color:var(--ink-3); margin-right:8px;">时间窗口</span>
-    <span class="range-btn heat-btn" data-heat="60" onclick="setHeat(this)">60日</span>
-    <span class="range-btn heat-btn active" data-heat="90" onclick="setHeat(this)">90日</span>
+    <span class="range-btn heat-btn active" data-heat="60" onclick="setHeat(this)">60日</span>
+    <span class="range-btn heat-btn" data-heat="90" onclick="setHeat(this)">90日</span>
     <span class="range-btn heat-btn" data-heat="250" onclick="setHeat(this)">250日</span>
     <span class="range-btn heat-btn" data-heat="0" onclick="setHeat(this)">全部</span>
   </div>
@@ -626,7 +632,7 @@ function renderMain(nDays) {{
       {{ left: 64, right: 64, top: 52, height: '30%' }},
       {{ left: 64, right: 64, top: '72%', bottom: 56 }}
     ],
-    dataZoom: [ {{type:'slider', xAxisIndex:[0,1], start:60, end:100, bottom:8, height:16,
+    dataZoom: [ {{type:'slider', xAxisIndex:[0,1], start:93, end:100, bottom:8, height:16,
                     borderColor:'#d5d0c5', fillerColor:'rgba(142,68,173,.08)'}},
                 {{type:'inside', xAxisIndex:[0,1]}} ],
     xAxis: [
@@ -658,6 +664,7 @@ function renderMain(nDays) {{
       {{ name:'全市场总净申购(对照)', type:'bar', xAxisIndex:1, yAxisIndex:2, data:total, barMaxWidth: 5, progressive:0,
          barGap: '-100%', itemStyle:{{color:'rgba(133,146,158,0.3)'}} }},
       {{ name:'累计估算(亿,右轴)', type:'line', xAxisIndex:1, yAxisIndex:3, data:cum, showSymbol:false, progressive:0,
+         itemStyle:{{color:'#8e44ad'}},
          lineStyle:{{width:1.8, color:'#8e44ad'}}, markLine: {{ silent:true, symbol:'none',
            lineStyle:{{color:'#8e44ad', type:'dashed', width:1, opacity:0.5}},
            data:[{{yAxis:0}}], label:{{show:false}} }} }}
@@ -674,11 +681,13 @@ function setRange(btn) {{
   mainChart.dispatchAction({{ type: 'dataZoom', start: z[0], end: z[1] }});
 }}
 renderMain(null);
+// 初始窗口=近半年（与按钮 active 档一致,dataZoom 93~100）
+mainChart.dispatchAction({{ type: 'dataZoom', start: RANGE_ZOOM['120'][0], end: 100 }});
 
 // ---- 结构与轮动（轮动窗口可调: 60/20/120/250 日）----
 structChart.setOption({{
   tooltip: {{ backgroundColor:'rgba(28,40,51,.94)', textStyle:{{color:'#fbfaf7', fontSize:12}} }},
-  grid: {{ left: 120, right: 50, top: 12, bottom: 30 }},
+  grid: {{ left: 8, right: 50, top: 12, bottom: 30, containLabel: true }},
   xAxis: Object.assign({{type:'value'}}, axisStyle),
   yAxis: {{ type:'category', data:CD.structure.map(function(s){{return s.code+' '+s.name;}}).reverse(),
     axisLabel:{{fontSize:11, color:'#5d6d7e'}}, axisLine:{{lineStyle:{{color:'#b8b2a6'}}}} }},
@@ -691,7 +700,7 @@ function renderRot(win) {{
   if (!data.length) return;
   rotationChart.setOption({{
     tooltip: {{ backgroundColor:'rgba(28,40,51,.94)', textStyle:{{color:'#fbfaf7', fontSize:12}} }},
-    grid: {{ left: 120, right: 55, top: 12, bottom: 30 }},
+    grid: {{ left: 8, right: 55, top: 12, bottom: 30, containLabel: true }},
     xAxis: Object.assign({{type:'value'}}, axisStyle),
     yAxis: {{ type:'category', data:data.map(function(s){{return s.code+' '+s.name;}}).reverse(),
       axisLabel:{{fontSize:11, color:'#5d6d7e'}}, axisLine:{{lineStyle:{{color:'#b8b2a6'}}}} }},
@@ -707,23 +716,31 @@ function setRot(btn) {{
   btn.classList.add('active');
   renderRot(btn.getAttribute('data-rot'));
 }}
-renderRot('60');
+renderRot('20');
 
-// ---- 图5: 两融 ----
+// ---- 图5: 两融（窗口可调: 120/250/全,默认最短120日）----
+var MARGIN_ZOOM = {{ '120': [93, 100], '250': [85, 100], 'all': [0, 100] }};
 marginChart.setOption({{
   tooltip: tipStyle,
   grid: {{ left: 70, right: 20, top: 14, bottom: 32 }},
   xAxis: Object.assign({{type:'category', data:CD.dates, axisLabel:{{formatter:function(v){{return v.slice(0,7);}}, color:'#5d6d7e', fontSize:10}}}}, axisStyle),
   yAxis: Object.assign({{type:'value', scale:true}}, axisStyle),
+  dataZoom: [ {{type:'inside', start:93, end:100}} ],
   series: [{{ type:'line', data:CD.margin, showSymbol:false, connectNulls:true,
     lineStyle:{{width:1.5, color:'#7d6d8f'}} }}]
 }});
+function setMargin(btn) {{
+  document.querySelectorAll('.margin-btn').forEach(function(b){{ b.classList.remove('active'); }});
+  btn.classList.add('active');
+  var z = MARGIN_ZOOM[btn.getAttribute('data-margin')] || [0, 100];
+  marginChart.dispatchAction({{ type: 'dataZoom', start: z[0], end: z[1] }});
+}}
 
 // ---- 图4: 单ETF（双 panel + 共享 dataZoom,下 panel 日期轴在缩略框上方可见）----
 function renderEtf(code) {{
   var D = CD.detail[code];
   if (!D) return;
-  var last = Math.min(D.dates.length, 520);
+  var last = Math.min(D.dates.length, 120);
   var dates = D.dates.slice(-last), kline = D.kline.slice(-last),
       flow = D.flow.slice(-last), index = D.index.slice(-last);
   etfChart.setOption({{
@@ -826,7 +843,7 @@ function setHeat(btn) {{
   btn.classList.add('active');
   renderHeat(parseInt(btn.getAttribute('data-heat'), 10));
 }}
-renderHeat(90);
+renderHeat(60);
 
 // ---- 证据卡（学 A-Resonance EvidenceCard: 计算方法/原始数据/判定理由）----
 function showEvidence(date, code) {{

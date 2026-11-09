@@ -1048,6 +1048,7 @@ function renderMain(nDays) {{
   // 双 grid: 上 52%~78% 主图,下 82%~96% 增减持;dataZoom 归属上 grid
   mainChart.setOption({{
     animation: false,
+    color: ['#b03a2e', '#85929e', '#b03a2e', '#c8d0d4', '#8e44ad'],
     tooltip: Object.assign({{axisPointer:{{type:'cross'}}}}, tipStyle),
     axisPointer: {{ link: [{{xAxisIndex: 'all'}}] }},
     legend: {{ data:[{{name:'合计份额(亿份,左轴)', icon:'rect'}}, {{name:'上证指数(右轴)', icon:'rect'}},

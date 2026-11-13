@@ -37,13 +37,23 @@ python scripts/daily_job.py   # 每日自动化入口（含飞书推送分支）
 
 ## 数据源
 
-| 数据 | 接口 | 说明 |
+| 数据 | 接口 | 更新周期 / 实际可得时间 |
 |---|---|---|
-| 沪市 ETF 份额 | akshare `fund_etf_scale_sse(date)` | 交易所官方,可回溯任意历史日 |
-| 深市 ETF 份额 | akshare `fund_scale_daily_szse(start,end)` | 交易所官方,区间上限约185自然日,超限自动分段 |
-| K 线/成交额 | 腾讯 `web.ifzq.gtimg.cn` | ETF 与指数日线 |
-| 融资余额 | 交易所两融日度披露（akshare） | `margin_daily` 表,2022-11 起 |
-| 季报锚点 | 基金定期报告前十大持有人 | 手工录入 `core/anchor_data.py` 的 ANCHORS 后跑 `cli.py rebuild`（`seed_anchors` 幂等 upsert）；或运行时 `calibration.upsert_anchor` |
+| 沪市 ETF 份额 | akshare `fund_etf_scale_sse(date)` | 日度,交易所盘后披露,当日傍晚（约 17:00–20:00）可查 T 日;可回溯任意历史日 |
+| 深市 ETF 份额 | akshare `fund_scale_daily_szse(start,end)` | 日度,同上;区间上限约185自然日,超限自动分段 |
+| K 线/成交额 | 腾讯 `web.ifzq.gtimg.cn` | 日度,收盘后当日数据即出 |
+| 融资余额 | 交易所两融日度披露（akshare） | 日度但 **T+1 披露**（沪市）/按月批次（深市）;`margin_daily` 表,2022-11 起 |
+| 季报锚点 | 基金定期报告前十大持有人 | **季度**,手工录入 `core/anchor_data.py` 的 ANCHORS 后跑 `cli.py rebuild`（`seed_anchors` 幂等 upsert）；或运行时 `calibration.upsert_anchor` |
+
+### 采集频率结论（2026-11-13 定稿）
+
+全部核心数据源均为**日频**，无小时级/分钟级数据；信号粒度（5日合计、MAD 异常、五灯共振）也是日频设计。因此：
+
+- **每个交易日跑一次，19:05 是最优档**：晚于份额披露时间（傍晚可查），当日数据命中率最高。
+- **无需盘中多次跑**：盘中只会拿到不完整数据，无增益。
+- **两融 T+1 / 晚披露兜底**：`daily_incremental` 自带近 5 自然日回补，次日运行自动追赶，无需额外补跑任务。
+- **周末/节假日**：日历由上证指数日线推导，非交易日空转无害但浪费，调度可只排周一~周五。
+- **季报期（4/8/10 月末）**：锚点是唯一不自动的数据源，季报披露后需手工更新 `core/anchor_data.py` 并 `cli.py rebuild`。
 
 ## 核心设计
 
@@ -74,7 +84,8 @@ python scripts/daily_job.py   # 每日自动化入口（含飞书推送分支）
 
 ## 部署
 
-每日自动化：WorkBuddy automation（每日 19:05）调用 `python scripts/daily_job.py`，绝对路径。
+每日自动化：WorkBuddy automation（工作日 19:05）调用 `python scripts/daily_job.py`，绝对路径。
+频率依据见上文「采集频率结论」。
 
 GitHub Pages 只静态部署 `site/` 目录、**不重新构建报告**。改代码后更新线上的三步：
 

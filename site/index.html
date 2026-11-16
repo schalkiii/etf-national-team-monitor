@@ -91,7 +91,7 @@ h1 {
 
 /* ---- 导航 ---- */
 nav {
-  position: sticky; top: 0; z-index: 50;
+  /* 静态导航：sticky 会覆盖图表顶部图例（滚动/截图时均有遮挡） */
   background: rgba(251,250,247,.92); backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--rule);
   margin: 18px 0 0;
@@ -329,7 +329,7 @@ tr:hover td { background: var(--paper-2); }
   </div>
   <p style="font-size:14px; margin:8px 0 10px;">最近活跃日（2026-11-06）国家队估算净增持 <b>23 亿</b>（1700 个交易日中 198 天标记为国家队活跃，窗口累计 -204 亿）。</p>
   <div id="mainChart" class="chart"></div>
-  <p class="footnote">上图左轴：八只核心宽基合计份额（亿份，交易所登记值）；右轴：上证指数；绿色底带为历史「机会共振」日；<b>紫色竖虚线为官宣/护盘事件</b>（如 2026-07-20 汇金/国新/诚通官宣增持、07-13 急跌保卫战、07-16 科创杀跌日，悬停可看日期）。下图柱：当日估算净买卖——<b>红柱为买入、绿柱为卖出</b>（卖出=总净赎回达历史 90 分位的「疑似撤退日」，同样 ×θ 折算）；灰色对照柱为全市场总净申购（未归因）；紫色累计线（右轴）为活跃日估算的逐日累加，<b>可升可降</b>——净卖出日会下拉累计线，反映的是估算净买入存量的变化，仍不代表当前持仓市值（θ 为区间估计）。份额在指数下行段阶梯式跳增，是一级市场大额申购的直接足迹。估算口径：当日核心宽基总净申购 × θ（θ 由季报前十大持有人锚点标定，建仓期均值 1.0）。仅当 |总净申购| 位于历史 90 分位以上、或指数单日跌幅超过 1% 且出现净申购时，才标记为「国家队活跃日」并折算；其余交易日计为零，不冒充。</p>
+  <p class="footnote">上图：左轴为八只核心宽基<b>合计份额</b>（亿份，交易所登记值，<b>全市场所有持有人合计，非国家队持仓</b>）；右1轴为上证指数；右2轴（紫色）为<b>国家队累计估算</b>（活跃日估算的逐日累加，<b>可升可降</b>，不代表当前持仓市值）。绿色底带为历史「机会共振」日；<b>紫色竖虚线为官宣/护盘事件</b>（如 2026-07-20 汇金/国新/诚通官宣增持、07-13 急跌保卫战、07-16 科创杀跌日，悬停可看日期）。下图柱：当日净申购——<b>红柱为国家队估算买入、绿柱为估算卖出</b>（卖出=总净赎回达历史 90 分位的「疑似撤退日」，同样 ×θ 折算）；<b>灰柱为全市场总净申购（未归因对照）</b>，与红绿柱同轴同单位，可直接比量级——两者的差额即被归因规则剔除的部分。份额在指数下行段阶梯式跳增，是一级市场大额申购的直接足迹。估算口径：当日核心宽基总净申购 × θ（θ 由季报前十大持有人锚点标定，建仓期均值 1.0）。仅当 |总净申购| 位于历史 90 分位以上、或指数单日跌幅超过 1% 且出现净申购时，才标记为「国家队活跃日」并折算；其余交易日计为零，不冒充。</p>
 </section>
 
 <section id="g-landing">
@@ -496,7 +496,7 @@ tr:hover td { background: var(--paper-2); }
 </section>
 
 <div class="disclosure">
-  <b>披露与日期戳纪律。</b> 本报告全部数字盖到披露日戳，引用时请附日期。数据可能因交易所修订而后向修正。本项目为描述性市场结构研究，不构成投资建议、推荐或预测；市场有风险，决策请独立判断或咨询持牌机构。生成于 2026-11-16 23:05，由本地数据管道自动重建，可用 <span class="mono">python cli.py report --date 2026-11-13</span> 复现任意历史日期。
+  <b>披露与日期戳纪律。</b> 本报告全部数字盖到披露日戳，引用时请附日期。数据可能因交易所修订而后向修正。本项目为描述性市场结构研究，不构成投资建议、推荐或预测；市场有风险，决策请独立判断或咨询持牌机构。生成于 2026-11-17 00:20，由本地数据管道自动重建，可用 <span class="mono">python cli.py report --date 2026-11-13</span> 复现任意历史日期。
 </div>
 
 </main>
@@ -551,14 +551,14 @@ function renderMain(nDays) {
     color: ['#b03a2e', '#85929e', '#b03a2e', '#c8d0d4', '#8e44ad'],
     tooltip: Object.assign({axisPointer:{type:'cross'}}, tipStyle),
     axisPointer: { link: [{xAxisIndex: 'all'}] },
-    legend: { data:[{name:'合计份额(亿份,左轴)', icon:'rect'}, {name:'上证指数(右轴)', icon:'rect'},
-                    {name:'当日估算净买入(亿)', icon:'rect'}, {name:'全市场总净申购(对照)', icon:'rect'},
-                    {name:'累计估算(亿,右轴)', icon:'rect'}],
-      top: 0, left: 60, itemGap: 18, itemWidth: 14,
+    legend: { data:[{name:'核心宽基合计份额(全市场·左轴)', icon:'rect'}, {name:'上证指数(右1轴)', icon:'rect'},
+                    {name:'国家队累计估算(亿·右2轴)', icon:'rect'},
+                    {name:'国家队估算净买入(亿)', icon:'rect'}, {name:'全市场总净申购(对照·未归因)', icon:'rect'}],
+      top: 22, left: 50, itemGap: 12, itemWidth: 14,
       textStyle:{color:'#5d6d7e', fontSize:11} },
     grid: [
-      { left: 64, right: 64, top: 52, height: '30%' },
-      { left: 64, right: 64, top: '72%', bottom: 56 }
+      { left: 64, right: 118, top: 74, height: '34%' },
+      { left: 64, right: 118, top: '58%', bottom: 56 }
     ],
     dataZoom: [ {type:'slider', xAxisIndex:[0,1], start:93, end:100, bottom:8, height:16,
                     borderColor:'#d5d0c5', fillerColor:'rgba(142,68,173,.08)'},
@@ -572,30 +572,31 @@ function renderMain(nDays) {
       Object.assign({type:'value', scale:true, position:'left', gridIndex:0}, axisStyle),
       Object.assign({type:'value', scale:true, position:'right', gridIndex:0, splitLine:{show:false}}, axisStyle),
       Object.assign({type:'value', scale:true, position:'left', gridIndex:1}, axisStyle),
-      Object.assign({type:'value', scale:true, position:'right', gridIndex:1, splitLine:{show:false}}, axisStyle)
+      // 右2轴：累计估算(国家队口径)移到上图，offset 与上证右轴错开
+      Object.assign({type:'value', scale:true, position:'right', gridIndex:0, offset:52,
+                     splitLine:{show:false},
+                     axisLabel:{formatter:function(v){return v.toFixed(0);}, color:'#8e44ad', fontSize:10}}, axisStyle)
     ],
     series: [
-      { name:'合计份额(亿份,左轴)', type:'line', xAxisIndex:0, yAxisIndex:0, data:shares, showSymbol:false, progressive:0,
+      { name:'核心宽基合计份额(全市场·左轴)', type:'line', xAxisIndex:0, yAxisIndex:0, data:shares, showSymbol:false, progressive:0,
          lineStyle:{width:2, color:'#b03a2e'}, areaStyle:{color:'rgba(176,58,46,0.05)'},
          markArea: { silent:true, itemStyle:{color:'rgba(30,132,73,0.06)'}, data: resoAreas(dates) },
          markLine: { silent:true, symbol:['none','none'],
            lineStyle:{color:'#8e44ad', type:'dashed', width:1.2, opacity:0.8},
            label:{show:false},
            data: eventLines(dates) } },
-      { name:'上证指数(右轴)', type:'line', xAxisIndex:0, yAxisIndex:1, data:index, showSymbol:false, progressive:0,
+      { name:'上证指数(右1轴)', type:'line', xAxisIndex:0, yAxisIndex:1, data:index, showSymbol:false, progressive:0,
          lineStyle:{width:1.4, color:'#85929e'}, opacity:0.85 },
-      { name:'当日估算净买入(亿)', type:'bar', xAxisIndex:1, yAxisIndex:2, data:nd, barMaxWidth: 5, progressive:0,
-         itemStyle:{color: function(p) { return p.value>=0 ? '#b03a2e' : '#1e8449'; } },
-         markLine: { silent:true, symbol:['none','none'],
-           lineStyle:{color:'#8e44ad', type:'dashed', width:1.2, opacity:0.8},
-           label:{show:false}, data: eventLines(dates) } },
-      { name:'全市场总净申购(对照)', type:'bar', xAxisIndex:1, yAxisIndex:2, data:total, barMaxWidth: 5, progressive:0,
-         barGap: '-100%', itemStyle:{color:'rgba(133,146,158,0.3)'} },
-      { name:'累计估算(亿,右轴)', type:'line', xAxisIndex:1, yAxisIndex:3, data:cum, showSymbol:false, progressive:0,
+      // 累计估算移到上图（右2轴），下图只留红绿柱与灰对照柱，量级对比更清晰
+      { name:'国家队累计估算(亿·右2轴)', type:'line', xAxisIndex:0, yAxisIndex:3, data:cum, showSymbol:false, progressive:0,
          itemStyle:{color:'#8e44ad'},
          lineStyle:{width:1.8, color:'#8e44ad'}, markLine: { silent:true, symbol:'none',
            lineStyle:{color:'#8e44ad', type:'dashed', width:1, opacity:0.5},
-           data:[{yAxis:0}], label:{show:false} } }
+           data:[{yAxis:0}], label:{show:false} } },
+      { name:'国家队估算净买入(亿)', type:'bar', xAxisIndex:1, yAxisIndex:2, data:nd, barMaxWidth: 5, progressive:0,
+         itemStyle:{color: function(p) { return p.value>=0 ? '#b03a2e' : '#1e8449'; } } },
+      { name:'全市场总净申购(对照·未归因)', type:'bar', xAxisIndex:1, yAxisIndex:2, data:total, barMaxWidth: 5, progressive:0,
+         barGap: '-100%', itemStyle:{color:'rgba(133,146,158,0.3)'} }
     ]
   }, true);
 }

@@ -2,11 +2,16 @@
 """每日 ETF 报告 → 小红书图文发布。
 
 流程：
-  ① scripts/snapshot_charts.py 产出图表 PNG（前置,已单独运行）
+  ① scripts/snapshot_charts_kwb.py 产出图表 PNG（前置,已单独运行；
+     备选 scripts/snapshot_charts.py）
   ② 解析最新报告 CD,组装小红书文案（标题≤20字,正文≤1000字）
   ③ 调 xiaohongshu-mcp REST API (localhost:18060) 发布图文
      - 未登录时引导先跑 login 工具扫码
      - 默认仅自己可见（试发验证）,--public 正式发布
+
+注意（2026-11-16 实测）：本脚本的 build_content()/选图逻辑仍可用，但 MCP 的
+publish_content 在本机被创作者中心鉴权拒绝，发布须改走 kimi-webbridge + 真实 Edge
+图形界面。详见 README「发布方法学补遗」。
 
 用法：
   python scripts/publish_xhs.py                    # 试发（仅自己可见）
@@ -138,9 +143,12 @@ def main() -> None:
     report = latest_report()
     date = report.stem.replace("etf_ntm_", "")
     charts_dir = Path(args.charts) if args.charts else report.parent / "charts"
-    images = sorted(charts_dir.glob(f"{report.stem}_*.png"))
+    # 仅匹配标准命名的 7 张图表（etf_ntm_<date>_NN_<name>.png），
+    # 排除调试残留（*.viewport.png / *.vpN.png / *dbg*.png）以免被当作正图发布
+    pat = re.compile(rf"^{re.escape(report.stem)}_\d{{2}}_[a-z]+\.png$")
+    images = sorted(p for p in charts_dir.glob(f"{report.stem}_*.png") if pat.match(p.name))
     if not images:
-        raise SystemExit(f"未找到图表 PNG,先运行: python scripts/snapshot_charts.py")
+        raise SystemExit("未找到图表 PNG,先运行: python scripts/snapshot_charts_kwb.py")
 
     if args.title and args.body:
         title, body = args.title, args.body

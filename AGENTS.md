@@ -10,8 +10,11 @@
 6. **严禁 token 泄露**：webhook 走环境变量 `ETF_NTM_FEISHU_WEBHOOK`，代码/日志/报告零暴露
 7. **诊断不动手**：先出方案（潜在收益/改动点/难度）确认再改
 8. **增量实现**：每阶段独立验收 → 全回归（rebuild → report → calibrate → backtest → events）→ 文档同步
-9. **发布纪律**：小红书默认仅自己可见试发，App 人工验收后才 --public；MCP 无编辑/删除，
-   更新图片=重发新笔记+手动删旧笔记；截图 PNG 发布前必须四边像素扫描（贴边=溢出）
+9. **发布纪律**：小红书默认仅自己可见试发，App 人工验收后才公开；MCP 无编辑/删除，
+   更新图片=重发新笔记+手动删旧笔记；截图 PNG 发布前必须四边像素扫描（贴边=溢出）。
+   MCP 的 `publish_content` 在本机实测被创作者中心鉴权拒绝（非 cookie 问题），**发布走
+   kimi-webbridge 驱动真实 Edge 图形界面**；截图优先 `snapshot_charts_kwb.py`。
+   门槛与判据见 `PUBLISHING.md`（README 面向读者，不放维护细节）
 
 ## 分层纪律（严禁跨层）
 
@@ -26,7 +29,16 @@ cli.py   仅组装
 
 ```bash
 python cli.py rebuild && python cli.py report && python cli.py calibrate && python cli.py backtest && python cli.py events
+python -m pytest tests/ -q          # 77 用例（pytest 在 Python313 环境,非默认 python）
 ```
+
+## 信号表与热力图
+
+- `signals` 表只由 `run_daily`（当天）和 `backfill-signals`（历史）写入；`cli.py report`
+  只算不落库。新库/重建后必须跑一次 `python cli.py backfill-signals --days 400`，
+  否则热力图只有当天一列、看起来全空。
+- 回填复用 `compute_signals_for_date` + `persist_signals`，`(code,date)` upsert 幂等，
+  可重复执行；单日异常隔离不中断。默认 400 交易日覆盖热力图全部窗口。
 
 ## 已知数据口径
 

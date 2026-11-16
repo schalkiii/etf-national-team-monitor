@@ -159,6 +159,38 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
     return signals
 
 
+def backfill_signals(
+    con: sqlite3.Connection,
+    dates: list[str],
+    progress_every: int = 50,
+) -> dict:
+    """按交易日列表回填信号表（幂等；仅复用计算与持久化，不改算法口径）。
+
+    每个交易日调用 compute_signals_for_date（所有查询均带 date<=?，无未来数据泄漏），
+    再由 persist_signals 以 (code,date) 唯一键 upsert。重复运行只覆盖同键，
+    不会重复插入。份额/K线/校准表完全不动。
+
+    :param dates: 升序交易日字符串列表
+    :param progress_every: 每处理多少个交易日打印一次进度，0 表示不打印
+    :return: {days: 成功交易日数, signals: 写入信号条数, failed: 失败日及原因}
+    """
+    n_days = 0
+    n_signals = 0
+    failed: list[str] = []
+    total = len(dates)
+    for i, d in enumerate(dates, 1):
+        try:
+            sigs = compute_signals_for_date(con, d)
+            persist_signals(con, sigs)
+            n_days += 1
+            n_signals += len(sigs)
+        except Exception as exc:  # noqa: BLE001  单日失败不中断整体回填
+            failed.append(f"{d}: {exc}")
+        if progress_every and i % progress_every == 0:
+            print(f"[backfill] {i}/{total} 交易日已处理")
+    return {"days": n_days, "signals": n_signals, "failed": failed}
+
+
 def persist_signals(con: sqlite3.Connection, signals: list[Signal]) -> None:
     for s in signals:
         payload = json.dumps({

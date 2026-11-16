@@ -2,6 +2,7 @@
 """CLI 入口：采集 / 重建 / 分析 / 报告 / 回测 / 校准 / 推送。
 用法：
   python cli.py rebuild            # 一键重建全量数据
+  python cli.py backfill-signals [--days N] [--start YYYY-MM-DD]  # 历史信号回填(热力图依赖)
   python cli.py daily              # 每日增量采集+信号+报告
   python cli.py report [--date YYYY-MM-DD]
   python cli.py status             # 数据库状态
@@ -46,8 +47,10 @@ def cmd_status(con) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ETF 国家队资金监控")
-    parser.add_argument("command", choices=["rebuild", "daily", "report", "status", "backtest", "calibrate", "push", "events"])
+    parser.add_argument("command", choices=["rebuild", "backfill-signals", "daily", "report", "status", "backtest", "calibrate", "push", "events"])
     parser.add_argument("--date", default=None)
+    parser.add_argument("--days", type=int, default=400, help="backfill-signals 回填的交易日数（默认 400，覆盖热力图全部窗口）")
+    parser.add_argument("--start", default=None, help="backfill-signals 回填起始日；与 --days 二选一")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -65,6 +68,26 @@ def main() -> int:
         stats = rebuild_all(con)
         print(json.dumps(stats, ensure_ascii=False, indent=2, default=str))
         return 0 if stats["shares"]["rows"] > 0 else 1
+
+    if args.command == "backfill-signals":
+        from fetch.calendar import latest_trading_day, trading_days
+        from core.analysis import backfill_signals
+        end = args.date or latest_trading_day(con)
+        if not end:
+            print("无交易日可回填")
+            return 1
+        if args.start:
+            dates = trading_days(con, args.start, end)
+        else:
+            from fetch.calendar import last_n_trading
+            dates = last_n_trading(con, end, args.days)
+        if not dates:
+            print(f"区间内无交易日: {args.start or args.days} ~ {end}")
+            return 1
+        print(f"回填 {len(dates)} 个交易日: {dates[0]} ~ {dates[-1]}")
+        stats = backfill_signals(con, dates)
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        return 0 if not stats["failed"] else 1
 
     if args.command == "daily":
         from fetch.collector import daily_incremental

@@ -149,17 +149,36 @@ document.addEventListener('DOMContentLoaded', function(){
 
 
 def edge_screenshot(edge: str, html_path: Path, out_png: Path, page_h: int) -> None:
-    """Edge CLI 全页截图到文件（python 子进程下唯一验证可行的输出通道）。"""
-    r = subprocess.run(
-        [edge, "--headless", "--disable-gpu",
-         f"--screenshot={out_png}",
-         f"--window-size={VIEWPORT_W},{page_h}",
-         "--force-device-scale-factor=2",
-         "--virtual-time-budget=12000",
-         html_path.resolve().as_uri()],
-        capture_output=True, timeout=120)
+    """Edge CLI 全页截图到文件（python 子进程下唯一验证可行的输出通道）。
+
+    沙箱/无桌面会话下 Edge 渲染完不退出（network-service/sitelist 重试），
+    故改为启动后轮询 PNG 落盘再终止进程，而非等待进程退出。"""
+    import time
+    if out_png.exists():
+        out_png.unlink()
+    args = [edge, "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+            f"--screenshot={out_png}",
+            f"--window-size={VIEWPORT_W},{page_h}",
+            "--force-device-scale-factor=2",
+            "--virtual-time-budget=12000",
+            html_path.resolve().as_uri()]
+    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    waited = 0
+    while waited < 180:
+        if out_png.exists() and out_png.stat().st_size > 10000:
+            size1 = out_png.stat().st_size
+            time.sleep(2)
+            if out_png.stat().st_size >= size1:
+                break
+        time.sleep(2)
+        waited += 2
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        proc.kill()
     if not out_png.exists() or out_png.stat().st_size < 10000:
-        raise SystemExit(f"截图失败: {r.stderr.decode('utf-8', errors='replace')[:300]}")
+        raise SystemExit("截图失败: Edge 在超时内未产出 PNG（沙箱需 --no-sandbox）")
 
 
 def scan_markers(full_png: Path) -> dict[str, dict]:

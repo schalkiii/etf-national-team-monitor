@@ -32,7 +32,7 @@ cli.py   仅组装
 
 ```bash
 python cli.py rebuild && python cli.py report && python cli.py calibrate && python cli.py backtest && python cli.py events
-python -m pytest tests/ -q          # 93 用例（默认 python 3.13 即可,无需切环境）
+python -m pytest tests/ -q          # 98 用例（默认 python 3.13 即可,无需切环境）
 ```
 
 ## 信号表与热力图

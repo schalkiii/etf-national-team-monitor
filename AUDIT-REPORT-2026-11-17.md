@@ -17,6 +17,12 @@
 > 自愈 + 回归测试 `test_calendar_selfheal.py`（93 用例全绿）。site/index.html
 > 新口径快照已同步（数据至 11-16，线上 live verified）。遗留清零。
 >
+> **增量审计追加（commit `7e8fd23`，2026-11-17）**：post-fix 复核发现 P0-1
+> 读侧改造遗漏四处——`event_window_path`/`run_event_study` 合计口径/
+> `total_shares_at`/`calibrated_daily_flow` 读裸 shares 未过滤 invalid_delta，
+> 事件窗口跨折算日（如 510310 2024-09-20 ×2.05）会出现机械跳变。已全部
+> 修复并新增 `test_invalid_delta_filter.py` 5 用例（98 用例全绿，CI 绿）。
+>
 > 审计范围：全部代码与文档（main @ cca9b6b）。审计只诊断不动手；改进项见文末清单，
 > 执行阶段按 software-improvement 纪律逐条实施。
 > 事实来源：源码通读 + 生产库 `~/.etf-ntm/etf_ntm.db` 只读核查 + 线上 Pages 验证。

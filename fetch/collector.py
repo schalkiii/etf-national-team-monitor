@@ -130,11 +130,16 @@ def rebuild_all(con: sqlite3.Connection) -> dict:
 
 
 def daily_incremental(con: sqlite3.Connection, days: int = 5) -> dict:
-    """每日增量：近 days 自然日的 K 线增量 + 当日沪市份额 + 深市区间 + 融资余额增量。"""
+    """每日增量：近 days 自然日的 K 线增量 + 当日沪市份额 + 深市区间 + 融资余额增量。
+    日历先自愈（K线拉新后从 index_daily 重建到最新）——日历过期会使 trading_days
+    返回空、沪市份额静默停采（2026-11-17 实测踩坑）。"""
     end_d = datetime.now().date()
     start_d = end_d - timedelta(days=days + 3)
     # K 线增量（腾讯接口直接覆盖式写入）
     n = backfill_klines(con)
+    # 日历自愈：以库内最新指数日线补齐 calendar 到当下
+    from fetch.calendar import rebuild_calendar
+    rebuild_calendar(con, lookback_days=120)
     # 份额增量
     tdays = trading_days(con, start_d.isoformat(), end_d.isoformat())
     rows = 0

@@ -51,7 +51,8 @@ python -m pytest tests/ -q          # 77 用例（pytest 在 Python313 环境,�
 - 510310/510050/512100/563360 等历史上有拆分/折算，由 `core/splits.py` 资产守恒法识别
   （`repair_existing` 幂等重建 share_splits/invalid_delta，rebuild/daily 已内置）；
   存量库迁移用 `python cli.py repair`（清洗 + adjust_factor 复位）
-- 512100 2020-06-10 份额 ×0.72 待人工核对定性（无拆分公告实锤，classify_jump 判 real 不处理）
+- 512100 2020-06-10 份额 ×0.72 已核实（2026 中报 §9/§11.1）：真实大额机构赎回非折算,
+  classify_jump 判 real 正确,该日差分保留为真实净赎回
 - 指数成交额：上证 sh000001 + 深成 sz399001 合计近似两市
 - margin_daily 已接数据源（2022-11 起,~954 行），L5 融资杠杆灯正常工作；
   `_margin_chg` 读取 `fin_balance_yi` 列（表缺失时优雅降级灰灯）

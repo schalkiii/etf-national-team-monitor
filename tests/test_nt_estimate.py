@@ -209,7 +209,7 @@ class TestEstimateNtSeries:
 
 
 class TestAlignToGrid:
-    """差分网格 → 披露日网格对齐（缺失日补 0 / cum 前值填充）。"""
+    """差分网格 → 披露日网格对齐（daily 缺失补 0 / total 缺失补 None / cum 前值填充）。"""
 
     def test_missing_days_filled_zero_and_carry(self):
         nt_est = {
@@ -223,7 +223,8 @@ class TestAlignToGrid:
         out = align_to_grid(nt_est, grid)
         assert out["daily"] == [10.0, 0.0, 0.0, -4.0]
         assert out["cum"] == [10.0, 10.0, 10.0, 6.0], "cum 缺失日用前值填充"
-        assert out["total"] == [12.0, 0.0, 0.0, -5.0]
+        # total（全市场对照柱）缺失日为 None——无差分数据 ≠ 净申购为零（A10/P3-2）
+        assert out["total"] == [12.0, None, None, -5.0]
 
     def test_grid_head_before_first_diff_day(self):
         """披露网格头部（首个差分日之前）→ 全 0,cum 用 0 起点。"""

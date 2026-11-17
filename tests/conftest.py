@@ -63,10 +63,18 @@ def seed(conn: sqlite3.Connection) -> None:
         else:
             idx *= 1.0005
         idx_map[d] = round(idx, 2)
+    # 成交额：波动序列（常数会让 60 日分位恒定,L4 灯红/绿分支永远测不到——A13）
+    # i=70~79 放量（分位 100%→过热红区）,i=0~19 缩量到早期的 1/3（分位低→冷清）
     for d, c in idx_map.items():
+        i = dates.index(d)
+        amt = 3e11
+        if i >= 70:
+            amt = 6e11        # 近端放量,L4 红
+        elif i < 20:
+            amt = 1e11        # 早期缩量,构成低分位样本
         conn.execute(
             "INSERT OR REPLACE INTO index_daily (index_code, date, close, amount) VALUES (?,?,?,?)",
-            ("sh000001", d, c, 3e11),
+            ("sh000001", d, c, amt),
         )
 
     for code in ("510300", "510500"):
@@ -86,7 +94,8 @@ def seed(conn: sqlite3.Connection) -> None:
                 (code, d, round(close, 4), round(share, 0)),
             )
 
-    # 融资余额：6 个点递增，_margin_chg 应为正
+    # 融资余额：6 个点递增（L5 加杠杆红分支）;早期递减段覆盖去杠杆绿分支由
+    # 测试内自建（见 test_lights_branches.py,合成数据只保证默认红分支可断言）
     margin_dates = dates[-6:]
     for k, d in enumerate(margin_dates):
         conn.execute(

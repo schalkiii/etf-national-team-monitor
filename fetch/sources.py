@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""数据源层：统一重试 + N 级降级 + 优雅降级（网络失败/非交易日不抛异常到上层）。
+"""数据源层：统一重试 + 优雅降级（网络失败/非交易日不抛异常到上层）。
 fetch 层只做请求与解析，严禁业务逻辑。"""
 from __future__ import annotations
 
 import json
 import time
 import urllib.request
-from collections.abc import Callable
 
 from core.config import HTTP_RETRIES, HTTP_TIMEOUT, RETRY_BACKOFF, TENCENT_KLINE_URL
 
@@ -39,9 +38,9 @@ def _parse_kline_rows(rows: list) -> list[tuple]:
             date = r[0]
             o, c, h, low = float(r[1]), float(r[2]), float(r[3]), float(r[4])
             vol = float(r[5])
+            # amount 缺失即 None（消费方 _market_amount 已容忍 null）;
+            # 不做均价×量估算——估算值无标记静默入库,违反口径诚实纪律
             amount = float(r[6]) if len(r) > 6 and r[6] not in ("", None) else None
-            if amount is None:
-                amount = (o + c + h + low) / 4.0 * vol * 100.0
             out.append((date, o, c, h, low, vol, amount))
         except (ValueError, IndexError):
             continue
@@ -130,16 +129,5 @@ def szse_shares(start: str, end: str) -> dict[str, dict[str, float]]:
         return {}
 
 
-# ----------------------------------------------------------------
-# 降级链执行器（学 etf-tracker source_chain）
-# ----------------------------------------------------------------
-def run_chain(sources: list[Callable[[], T | None]]) -> T | None:
-    """按序尝试各数据源函数,首个非空结果胜出;全败返回 None。"""
-    for fn in sources:
-        try:
-            result = fn()
-        except Exception:
-            result = None
-        if result:
-            return result
-    return None
+# 注：原「降级链执行器 run_chain」（学 etf-tracker source_chain）从未接线,
+# 已删除（AUDIT-REPORT A6）。多源降级需求出现时按 http_get_json 重试模式新建。

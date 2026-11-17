@@ -121,14 +121,16 @@ def estimate_nt_series(by_date: dict[str, dict[str, tuple[float, float]]],
 
 
 def align_to_grid(nt_est: dict, grid_dates: list[str]) -> dict[str, list]:
-    """差分日网格 → 披露日网格对齐（缺失日补 0：非活跃日本就是零,不冒充）。
+    """差分日网格 → 披露日网格对齐。
 
+    daily 缺失日补 0（非活跃日本就是零,不冒充）;total（全市场对照柱）缺失日
+    补 None（无差分数据 ≠ 净申购为零,echarts 对 null 自动跳过不画柱）;
     cum 缺失日用前值填充（阶梯连续,避免折线断裂）。"""
     nt_by_date = dict(zip(nt_est["dates"], zip(nt_est["daily"], nt_est["cum"],
                                                nt_est["total"], nt_est["active"])))
-    daily_a = [nt_by_date.get(d, (0.0, None, 0.0, 0))[0] for d in grid_dates]
-    cum_a = [nt_by_date.get(d, (0.0, None, 0.0, 0))[1] for d in grid_dates]
-    total_a = [nt_by_date.get(d, (0.0, None, 0.0, 0))[2] for d in grid_dates]
+    daily_a = [nt_by_date.get(d, (0.0, None, None, 0))[0] for d in grid_dates]
+    cum_a = [nt_by_date.get(d, (0.0, None, None, 0))[1] for d in grid_dates]
+    total_a = [nt_by_date.get(d, (0.0, None, None, 0))[2] for d in grid_dates]
     prev = 0.0
     for i, v in enumerate(cum_a):
         if v is None:

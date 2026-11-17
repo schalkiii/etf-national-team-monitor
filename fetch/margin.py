@@ -47,7 +47,11 @@ def fetch_margin_sse(start: str, end: str) -> list[dict]:
 
 
 def fetch_margin_szse(date_q: str) -> list[dict]:
-    """深交所某月融资余额（akshare stock_margin_szse 按月查询）。date_q: 'YYYYMM'。"""
+    """深交所某月融资余额（akshare stock_margin_szse 按月查询）。
+
+    2026-11-17 实测接口返回空（失效或已变更），已从 backfill_margin 移除调用。
+    保留函数供接口恢复后重新接入：恢复时在 backfill_margin 尾部补逐月循环即可。
+    """
     try:
         import akshare as ak
         df = ak.stock_margin_szse(date=date_q)
@@ -88,22 +92,17 @@ def upsert_margin(con: sqlite3.Connection, rows: list[dict]) -> int:
 
 
 def backfill_margin(con: sqlite3.Connection, months: int = 36) -> int:
-    """回填近 N 个月融资余额（沪市区间接口为主,深市按月补）。"""
+    """回填近 N 个月融资余额（沪市区间接口;深市接口 2026-11 实测失效,单边口径）。
+
+    沪市融资余额占两市大头（~55%），其 5 日变化率与两市口径高度同步，
+    L5 灯与图 4 以「沪市」单边口径运行——幅度近似可用,绝对值有偏。
+    """
     from datetime import datetime, timedelta
     end_d = datetime.now()
     start_d = end_d - timedelta(days=30 * months)
     total = 0
-    # 沪市：区间接口一次拉全
     rows = fetch_margin_sse(start_d.strftime("%Y%m%d"), end_d.strftime("%Y%m%d"))
     if rows:
         total += upsert_margin(con, rows)
-    # 深市：逐月
-    cur = start_d
-    while cur <= end_d:
-        rows = fetch_margin_szse(cur.strftime("%Y%m"))
-        if rows:
-            total += upsert_margin(con, rows)
-        # 跳到下个月
-        cur = (cur.replace(day=1) + timedelta(days=32)).replace(day=1)
-    log_fetch(con, "akshare", "backfill_margin", total > 0, total)
+    log_fetch(con, "akshare", "backfill_margin_sse_only", total > 0, total)
     return total

@@ -384,9 +384,9 @@ tr:hover td {{ background: var(--paper-2); }}
       <div class="sub">收盘 {last_close_val} · 年线 {cd.get('yearline') or '—'}</div>
     </div>
     <div class="gauge">
-      <div class="label">两融余额</div>
+      <div class="label">沪市融资余额</div>
       <div class="value">{f"{margin_last:,.0f}" if margin_last else '—'}<span style="font-size:14px;color:var(--ink-3)"> 亿</span></div>
-      <div class="sub">融资余额，交易所日度披露</div>
+      <div class="sub">沪市单边，交易所日度披露</div>
     </div>
     {overseas_gauges}
   </div>
@@ -484,7 +484,7 @@ tr:hover td {{ background: var(--paper-2); }}
 
 <section id="g-margin">
   <div class="sec-head">
-    <span class="sec-no">图 4</span><h2 class="sec-title">两融余额：杠杆出清的背景</h2>
+    <span class="sec-no">图 4</span><h2 class="sec-title">沪市融资余额：杠杆出清的背景</h2>
     <span class="sec-note">绝对值口径 &middot; 快速变化率见五灯「融资杠杆」</span>
   </div>
   <div>
@@ -494,7 +494,7 @@ tr:hover td {{ background: var(--paper-2); }}
     <span class="range-btn margin-btn" data-margin="all" onclick="setMargin(this)">全部</span>
   </div>
   <div id="marginChart" class="chart"></div>
-  <p class="footnote">融资余额快速下降记录杠杆仓位被强平出清；回升则记录杠杆回归。国家队申购历史上与指数回撤期相伴。</p>
+  <p class="footnote">沪市融资余额（单边口径：深市接口 2026-11 起失效）。快速下降记录杠杆仓位被强平出清；回升则记录杠杆回归。国家队申购历史上与指数回撤期相伴。</p>
 </section>
 
 <section id="g-heat">
@@ -549,7 +549,7 @@ tr:hover td {{ background: var(--paper-2); }}
         <tr><td>份额流向</td><td>当日 Δ份额×净值 在近 300 日净申购历史中的分位</td><td class="dn">分位 ≤5%（净赎回极端）</td><td class="up">分位 ≥95%（净申购极端）</td></tr>
         <tr><td>指数回撤</td><td>跟踪指数当日涨跌幅</td><td>—</td><td class="up">指数跌 ≥1.5%（护盘语境）</td></tr>
         <tr><td>市场热度</td><td>两市成交额（沪+深）60 日滚动分位</td><td class="dn">分位 ≥80%（过热）</td><td class="up">分位 ≤20%（冷清）</td></tr>
-        <tr><td>融资杠杆</td><td>融资余额 5 日变化率</td><td class="dn">≥+1%（快速加杠杆）</td><td class="up">≤−1%（快速去杠杆）</td></tr>
+        <tr><td>融资杠杆</td><td>沪市融资余额 5 日变化率（单边口径）</td><td class="dn">≥+1%（快速加杠杆）</td><td class="up">≤−1%（快速去杠杆）</td></tr>
         <tr><td>共振判定</td><td colspan="3">同色灯 ≥3 盏 → 危险共振（红）/ 机会共振（绿），否则中性。灰灯 = 中性区间或数据缺失。</td></tr>
         <tr><td>国家队活跃日</td><td colspan="3">当日核心宽基总净申购 ≥ 历史 90 分位，或指数跌 &gt;1% 且净申购为正 → 估算 = 总净申购 × θ；其余日记 0，不冒充。</td></tr>
         <tr><td>份额折算清洗</td><td colspan="3">份额单日跳变 &gt;15% 进入候选：资产守恒（(1+Δ份额)×(1+Δ价) ≈ 折算比）且复权价连续 → 判折算，差分作废；次日反向大幅回归 → 判披露噪声，差分作废。原始披露值永不修改。</td></tr>
@@ -561,7 +561,7 @@ tr:hover td {{ background: var(--paper-2); }}
     <li><b>为什么份额是正确的序列。</b> 二级市场买卖只改价格、不改 ETF 总份额；只有一级市场申赎才改。交易所每日披露全部 ETF 的登记份额（T+1）。本报告读取的正是这份登记数据，不是资金流估算。</li>
     <li><b>申购能证明什么、不能证明什么。</b> 份额跳增证明有人大额申购，但不证明是谁。归因国家队需要三个证据合流：官方公告、季报前十大持有人（滞后约一季度）、以及行为模式吻合（回撤期、多宽基同步、量级匹配）。本报告的「估算」仅在证据合流时给出，且始终标注为估算。</li>
     <li><b>θ 锚点校准。</b> 季报披露的汇金名义持仓变化（ΔNT）除以同区间总份额变化（ΔS）得到 θ。θ&gt;1 表示国家队增持超过总增量——同期有其他投资者净赎回。θ 为区间估计，非逐日真值。</li>
-    <li><b>数据来源。</b> ETF 份额：上交所/深交所日度披露（经 akshare）。行情与指数：腾讯行情公开接口。融资余额：交易所两融日度披露。全部为免费公开数据，无付费 feed。</li>
+    <li><b>数据来源。</b> ETF 份额：上交所/深交所日度披露（经 akshare）。行情与指数：腾讯行情公开接口。融资余额：上交所两融日度披露（沪市单边）。全部为免费公开数据，无付费 feed。</li>
     <li><b>分档是标签，不是信号。</b> 五日 +7.5% / +2% / −2% 等阈值用于描述性分档，便于逐日比较。回测显示：历史「机会共振」信号后 20 日平均收益为负——护盘信号是市场压力的标记，不构成买入依据。</li>
     <li><b>覆盖范围。</b> 核心层为 2026 年 7 月官方公告点名的沪深宽基；扩展层含国新/诚通风格探头；观察层为散户情绪对照。深市数据自 2025 年中起可回溯。</li>
   </ol>

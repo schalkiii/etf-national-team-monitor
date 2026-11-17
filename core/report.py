@@ -310,17 +310,20 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
 
     # ---- 热力图数据层：全部信号日 × 核心标的信号格（学 A-Resonance ResonanceHeatmap）----
     # 格值: direction 映射 +2 LONG / -2 SHORT / 0 NEUTRAL / None BLOCKED
+    # evidence/flows 与 values 同窗 400 日（payload 体积大,全历史烘进单文件
+    # 会让 HTML 线性膨胀——A7;热力图交互窗口最深 400 日,更早的证据卡无入口）
+    HM_WINDOW_DAYS = 400
     DIR_VALUE = {"LONG": 2, "SHORT": -2, "NEUTRAL": 0}
     hm_rows = con.execute(
         """SELECT s.date, s.code, s.direction, s.net_flow_yi, s.resonance, s.payload
            FROM signals s JOIN calendar c ON c.date=s.date AND c.is_trading=1
            WHERE s.code IN (%s) AND s.date<=? ORDER BY s.date DESC LIMIT ?
              """ % ",".join("?" * len(CORE_CODES)),
-        (*CORE_CODES, date, 400 * len(CORE_CODES))).fetchall()
+        (*CORE_CODES, date, HM_WINDOW_DAYS * len(CORE_CODES))).fetchall()
     hm_by_date: dict[str, dict] = {}
     for r in hm_rows:
         hm_by_date.setdefault(r["date"], {})[r["code"]] = r
-    hm_dates = sorted(hm_by_date)
+    hm_dates = sorted(hm_by_date)[-HM_WINDOW_DAYS:]
     heatmap = {
         "dates": hm_dates,
         "codes": CORE_CODES,
@@ -328,7 +331,7 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
         # value[date][codeIdx]: 2/-2/0/null
         "values": [[DIR_VALUE.get(hm_by_date[d][c]["direction"]) if c in hm_by_date[d] else None
                     for c in CORE_CODES] for d in hm_dates],
-        # 证据层: 每格 payload 解析(供证据卡)
+        # 证据层: 每格 payload 解析(供证据卡,与 values 同窗 400 日)
         "evidence": {d: {c: (hm_by_date[d][c]["payload"] or "") for c in hm_by_date[d]} for d in hm_dates},
         "flows": {d: {c: hm_by_date[d][c]["net_flow_yi"] for c in hm_by_date[d]} for d in hm_dates},
     }

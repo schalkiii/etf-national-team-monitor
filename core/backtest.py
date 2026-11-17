@@ -74,7 +74,7 @@ def seed_known_events(con: sqlite3.Connection) -> int:
 def event_window_path(con: sqlite3.Connection, event_date: str, code: str, pre: int = 5, post: int = 20) -> dict:
     """事件窗口 [pre, post] 的份额路径与价格路径。"""
     rows = con.execute(
-        """SELECT date, shares*adjust_factor AS shares_adj, close FROM etf_daily
+        """SELECT date, shares AS shares_adj, close FROM etf_daily
            WHERE code=? AND shares IS NOT NULL AND date>=date(?, '-30 day') AND date<=date(?, '+40 day')
            ORDER BY date""",
         (code, event_date, event_date),
@@ -106,7 +106,7 @@ def run_event_study(con: sqlite3.Connection) -> dict:
             study["paths"][code] = event_window_path(con, ev["event_date"], code)
         # 事件后5日核心层合计份额变化
         rows = con.execute(
-            """SELECT date, SUM(shares*adjust_factor) t FROM etf_daily
+            """SELECT date, SUM(shares) t FROM etf_daily
                WHERE code IN (%s) AND shares IS NOT NULL AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')
                GROUP BY date ORDER BY date""" % ",".join("?" * len(CORE_CODES)),
             (*CORE_CODES, ev["event_date"], ev["event_date"]),

@@ -459,7 +459,7 @@ tr:hover td {{ background: var(--paper-2); }}
 <section id="g-detail">
   <div class="sec-head">
     <span class="sec-no">图 3</span><h2 class="sec-title">单基金详情：K 线、跟踪指数与份额日增量</h2>
-    <span class="sec-note">份额拆分已复权</span>
+    <span class="sec-note">折算日差分已作废</span>
   </div>
   <div>
     <span class="range-btn etf-btn active" data-etf="510300" onclick="setEtf(this)">510300 沪深300</span>
@@ -467,7 +467,7 @@ tr:hover td {{ background: var(--paper-2); }}
     <span class="range-btn etf-btn" data-etf="588000" onclick="setEtf(this)">588000 科创50</span>
   </div>
   <div id="etfChart" class="chart"></div>
-  <p class="footnote">上栏 K 线（红涨绿跌）叠跟踪指数（右轴）；下栏份额日增量柱，正为净申购。份额拆分折算产生的机械跳变已按复权因子处理，不会误读为申购。</p>
+  <p class="footnote">上栏 K 线（红涨绿跌）叠跟踪指数（右轴）；下栏份额日增量柱，正为净申购。份额折算/拆分产生的机械跳变已识别并作废当日差分（不画柱），不会误读为申购。</p>
 </section>
 
 <section id="g-flow">

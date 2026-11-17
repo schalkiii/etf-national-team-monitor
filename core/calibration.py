@@ -48,14 +48,14 @@ def nt_holding_by_period(con: sqlite3.Connection, code: str) -> dict[str, float]
 
 
 def total_shares_at(con: sqlite3.Connection, code: str, date: str) -> float | None:
-    """date 当日或之前最近一日复权份额（亿份）。"""
+    """date 当日或之前最近一日总份额（亿份,raw 披露口径;折算日差分由读侧过滤）。"""
     r = con.execute(
-        "SELECT shares, adjust_factor FROM etf_daily WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1",
+        "SELECT shares FROM etf_daily WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1",
         (code, date),
     ).fetchone()
     if not r:
         return None
-    return r["shares"] * r["adjust_factor"] / 1e8
+    return r["shares"] / 1e8
 
 
 def estimate_theta(con: sqlite3.Connection, code: str) -> dict:
@@ -107,7 +107,7 @@ def calibrated_daily_flow(con: sqlite3.Connection, code: str, date: str) -> dict
     θ>1 时推算值可超总净流（国家队买、别人卖的语义）;θ<0 时取 0 下限并标注语义。"""
     theta, theta_period = latest_valid_theta(con, code)
     rows = con.execute(
-        """SELECT date, shares, adjust_factor, close FROM etf_daily
+        """SELECT date, shares, close FROM etf_daily
            WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 2""",
         (code, date),
     ).fetchall()
@@ -115,7 +115,7 @@ def calibrated_daily_flow(con: sqlite3.Connection, code: str, date: str) -> dict
         return {"code": code, "date": date, "nt_flow_yi": None, "flow_source": None,
                 "reason": "无有效 θ 锚点,见 calibrate 命令录入季报数据"}
     prev, cur = rows[1], rows[0]
-    delta_yi = (cur["shares"] * cur["adjust_factor"] - prev["shares"] * prev["adjust_factor"]) / 1e8
+    delta_yi = (cur["shares"] - prev["shares"]) / 1e8
     total_flow = delta_yi * (cur["close"] or 0.0)
     nt_flow = total_flow * theta
     note = ""

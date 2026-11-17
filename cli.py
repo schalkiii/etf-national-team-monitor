@@ -2,6 +2,7 @@
 """CLI 入口：采集 / 重建 / 分析 / 报告 / 回测 / 校准 / 推送。
 用法：
   python cli.py rebuild            # 一键重建全量数据
+  python cli.py repair             # 折算/噪声清洗（幂等;rebuild/daily 已内置,独立入口供存量库迁移）
   python cli.py backfill-signals [--days N] [--start YYYY-MM-DD]  # 历史信号回填(热力图依赖)
   python cli.py daily              # 每日增量采集+信号+报告
   python cli.py report [--date YYYY-MM-DD]
@@ -47,7 +48,7 @@ def cmd_status(con) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ETF 国家队资金监控")
-    parser.add_argument("command", choices=["rebuild", "backfill-signals", "daily", "report", "status", "backtest", "calibrate", "push", "events"])
+    parser.add_argument("command", choices=["rebuild", "repair", "backfill-signals", "daily", "report", "status", "backtest", "calibrate", "push", "events"])
     parser.add_argument("--date", default=None)
     parser.add_argument("--days", type=int, default=400, help="backfill-signals 回填的交易日数（默认 400，覆盖热力图全部窗口）")
     parser.add_argument("--start", default=None, help="backfill-signals 回填起始日；与 --days 二选一")
@@ -68,6 +69,20 @@ def main() -> int:
         stats = rebuild_all(con)
         print(json.dumps(stats, ensure_ascii=False, indent=2, default=str))
         return 0 if stats["shares"]["rows"] > 0 else 1
+
+    if args.command == "repair":
+        # 折算/噪声清洗（幂等）：rebuild/daily 已内置此步骤;
+        # 独立入口供存量库迁移——废弃的 adjust_factor 一次性复位为 1.0,
+        # invalid_delta/share_splits 幂等重建。
+        from core.splits import repair_existing
+        stats = repair_existing(con, dry_run=False)
+        con.execute("UPDATE etf_daily SET adjust_factor=1.0 WHERE adjust_factor != 1.0")
+        reset_rows = con.total_changes
+        con.commit()
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        print(f"adjust_factor 已复位为 1.0（读侧已不再引用该列,复位只为消除脏数据）")
+        print("提示: 复位后请重跑 `python cli.py backfill-signals --days 400` 刷新信号")
+        return 0
 
     if args.command == "backfill-signals":
         from fetch.calendar import latest_trading_day, trading_days
@@ -97,7 +112,7 @@ def main() -> int:
         print(json.dumps({"incremental": inc, "daily": result}, ensure_ascii=False, indent=2, default=str))
         if result.get("blocked_all"):
             return 2
-        return 0 if inc["share_rows"] >= 0 else 1
+        return 0 if inc["share_rows"] > 0 else 1
 
     if args.command == "report":
         from core.report import generate_report

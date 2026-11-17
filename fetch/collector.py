@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
-"""采集与回填：K 线 / 份额 / 复权因子 / 一键重建。
-份额复权（学 A-Resonance 159740 踩坑）：拆分造成份额跳变必须探测,
-否则拆分会被误判为巨额申购。"""
+"""采集与回填：K 线 / 份额 / 一键重建。
+
+份额折算/披露噪声识别（单一权威 core/splits.py）：rebuild 与 daily 均调用
+repair_existing 幂等重建 share_splits/invalid_delta；读侧（analysis/report/
+calibration）用裸 shares + invalid_delta 过滤。adjust_factor 复权因子法已废弃
+（qfq 价格序列上「价格反向验证」永不成立，曾把真实巨额申购误判为拆分，
+见 AUDIT-REPORT A1/A2）。
+"""
 from __future__ import annotations
 
 import sqlite3
@@ -11,9 +16,6 @@ from core.config import ETF_POOL, INDEX_CODES, SHARE_LOOKBACK_DAYS, KLINE_LOOKBA
 from fetch.calendar import daterange, rebuild_calendar, trading_days
 from fetch.sources import sse_shares, szse_shares, tencent_kline
 from store.db import log_fetch
-
-# 拆分探测阈值：单日份额变化超过 25% 且与价格跳变同向 → 视为拆分/折算
-SPLIT_DETECT_RATIO = 0.25
 
 
 def backfill_klines(con: sqlite3.Connection, start: str = "2020-01-01") -> int:
@@ -110,48 +112,20 @@ def backfill_shares(con: sqlite3.Connection, lookback_days: int = SHARE_LOOKBACK
     return stats
 
 
-def detect_splits_and_adjust(con: sqlite3.Connection, code: str) -> list[dict]:
-    """拆分探测与复权：份额单日跳变 >25% 且价格反向跳变 → 拆分。
-    写入 adjust_factor,使复权份额序列连续。返回事件列表。"""
-    rows = con.execute(
-        "SELECT date, close, shares FROM etf_daily WHERE code=? AND shares IS NOT NULL ORDER BY date",
-        (code,),
-    ).fetchall()
-    events = []
-    if len(rows) < 2:
-        return events
-    cum_factor = 1.0
-    prev = rows[0]
-    factors = {rows[0]["date"]: 1.0}
-    for cur in rows[1:]:
-        ratio = cur["shares"] / prev["shares"] if prev["shares"] else 1.0
-        price_ratio = (prev["close"] / cur["close"]) if (prev["close"] and cur["close"]) else 1.0
-        # 份额跳升>25% 且价格近似同比例下跌 → 拆分
-        if abs(ratio - 1.0) > SPLIT_DETECT_RATIO and 0.7 < (ratio * price_ratio) < 1.4:
-            cum_factor *= ratio
-            events.append({"code": code, "date": cur["date"], "ratio": round(ratio, 4)})
-        factors[cur["date"]] = cum_factor
-        prev = cur
-    for d, f in factors.items():
-        con.execute("UPDATE etf_daily SET adjust_factor=? WHERE code=? AND date=?", (f, code, d))
-    con.commit()
-    return events
-
-
 def rebuild_all(con: sqlite3.Connection) -> dict:
-    """一键重建（学 A-Resonance 承重顺序）：日历 → K线 → 份额 → 复权 → 融资余额 → 锚点。"""
+    """一键重建（学 A-Resonance 承重顺序）：日历 → K线 → 份额 → 折算清洗 → 融资余额 → 锚点。"""
     n_cal = rebuild_calendar(con, lookback_days=2600)
     n_kline = backfill_klines(con)
     share_stats = backfill_shares(con)
-    splits = []
-    for code in ETF_POOL:
-        splits.extend(detect_splits_and_adjust(con, code))
+    # 折算/噪声清洗（单一权威 core/splits.py,幂等重建 invalid_delta）
+    from core.splits import repair_existing
+    repair_stats = repair_existing(con, dry_run=False)
     from fetch.margin import backfill_margin
     n_margin = backfill_margin(con, months=48)
     # 已知锚点幂等 seed（core/anchor_data.py：新锚点录入 ANCHORS 后 rebuild 即生效）
     from core.anchor_data import seed_anchors
     n_anchor = seed_anchors(con)
-    return {"calendar": n_cal, "klines": n_kline, "shares": share_stats, "splits": splits,
+    return {"calendar": n_cal, "klines": n_kline, "shares": share_stats, "repair": repair_stats,
             "margin_rows": n_margin, "anchors_seeded": n_anchor}
 
 
@@ -191,6 +165,7 @@ def daily_incremental(con: sqlite3.Connection, days: int = 5) -> dict:
     from fetch.margin import backfill_margin
     n_margin = backfill_margin(con, months=1)
     log_fetch(con, "akshare", "daily_incremental", rows > 0, rows)
-    for code in ETF_POOL:
-        detect_splits_and_adjust(con, code)
-    return {"klines": n, "share_rows": rows, "margin_rows": n_margin}
+    # 折算/噪声清洗（幂等,新增披露日的 Δshares 标记随之刷新）
+    from core.splits import repair_existing
+    repair_stats = repair_existing(con, dry_run=False)
+    return {"klines": n, "share_rows": rows, "margin_rows": n_margin, "repair": repair_stats}

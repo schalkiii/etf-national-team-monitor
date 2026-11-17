@@ -87,7 +87,7 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
     invalid_delta = _invalid_delta_set(con)
     for code, meta in ETF_POOL.items():
         rows = con.execute(
-            """SELECT date, close, amount, shares, adjust_factor FROM etf_daily
+            """SELECT date, close, amount, shares FROM etf_daily
                WHERE code=? AND date<=? ORDER BY date DESC LIMIT 300""",
             (code, date),
         ).fetchall()
@@ -107,8 +107,8 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
             gap_days = (_date.fromisoformat(share_rows[-1]["date"])
                         - _date.fromisoformat(share_rows[-2]["date"])).days
             if gap_days <= 10:
-                prev_s = share_rows[-2]["shares"] * share_rows[-2]["adjust_factor"]
-                cur_s = share_rows[-1]["shares"] * share_rows[-1]["adjust_factor"]
+                prev_s = share_rows[-2]["shares"]
+                cur_s = share_rows[-1]["shares"]
                 delta_shares_yi = (cur_s - prev_s) / 1e8
         net_flow_yi, flow_source = describe_flow(delta_shares_yi, cur["close"])
 
@@ -120,7 +120,7 @@ def compute_signals_for_date(con: sqlite3.Connection, date: str) -> list[Signal]
                 gap_days = (_date.fromisoformat(b["date"]) - _date.fromisoformat(a["date"])).days
                 if gap_days > 10:
                     continue
-                d = (b["shares"] * b["adjust_factor"] - a["shares"] * a["adjust_factor"]) / 1e8
+                d = (b["shares"] - a["shares"]) / 1e8
                 v = d * (b["close"] if b["close"] else 0.0)
                 flow_hist.append(v)
         price_hist = [r["close"] for r in rows if r["close"]]
@@ -215,7 +215,7 @@ def persist_signals(con: sqlite3.Connection, signals: list[Signal]) -> None:
 def combined_core_description(con: sqlite3.Connection, date: str) -> dict:
     """核心层合计份额 5 日变化（quantdata.uk 式描述标签）。"""
     rows = con.execute(
-        """SELECT date, SUM(shares*adjust_factor) total FROM etf_daily
+        """SELECT date, SUM(shares) total FROM etf_daily
            WHERE code IN (%s) AND shares IS NOT NULL AND date<=?
            GROUP BY date ORDER BY date DESC LIMIT 6""" % ",".join("?" * len(CORE_CODES)),
         (*CORE_CODES, date),

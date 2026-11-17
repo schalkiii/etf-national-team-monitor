@@ -129,7 +129,7 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
     """图表数据：核心合计份额 / 上证指数 / 融资余额 / 结构分布 / 距年线 / 热力图 / 情绪 / 台账。"""
     invalid_delta, has_invalid = _invalid_delta_join(con)
     share_rows = con.execute(
-        """SELECT date, SUM(shares*adjust_factor) total FROM etf_daily
+        """SELECT date, SUM(shares) total FROM etf_daily
            WHERE code IN (%s) AND shares IS NOT NULL AND date<=?
            GROUP BY date ORDER BY date""" % ",".join("?" * len(CORE_CODES)),
         (*CORE_CODES, date),
@@ -165,11 +165,11 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
     structure = []
     for code in CORE_CODES:
         r = con.execute(
-            "SELECT shares, adjust_factor FROM etf_daily WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1",
+            "SELECT shares FROM etf_daily WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1",
             (code, date)).fetchone()
         if r:
             structure.append({"code": code, "name": ETF_POOL[code]["name"].replace("ETF", ""),
-                              "value": round(r["shares"] * r["adjust_factor"] / 1e8, 1)})
+                              "value": round(r["shares"] / 1e8, 1)})
 
     # 结构轮动：多窗口（60/20/120/250 日）份额变化%，前端可切换
     ROT_WINDOWS = [60, 20, 120, 250]
@@ -177,7 +177,7 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
     for code in CORE_CODES:
         for w in ROT_WINDOWS:
             rows = con.execute(
-                """SELECT date, shares*adjust_factor s FROM etf_daily
+                """SELECT date, shares s FROM etf_daily
                    WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT ?""",
                 (code, date, w + 1)).fetchall()
             if len(rows) >= min(w + 1, 30) and rows[-1]["s"]:
@@ -188,16 +188,24 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
     # 单 ETF 详情数据（学 A-Resonance K线多面板: K线+份额日增量柱+指数对照）
     # K线对齐 fallback（学 alignKlineToDates）：缺失行情日以「最近真实收盘」平推,
     # 绝不用 0/null——0 会压扁 y 轴,null 会让蜡烛图断裂。
+    # 折算日标记（split_flags）：取自 share_splits 登记表（资产守恒法确证）,
+    # 该日差分无申赎含义——但柱序列在折算日为 None(不画柱),不会误读为申购。
+    split_days: set[str] = set()
+    try:
+        split_days = {(r["code"], r["date"]) for r in con.execute(
+            "SELECT code, date FROM share_splits").fetchall()}
+    except sqlite3.OperationalError:
+        pass
     detail = {}
     for code in ["510300", "512100", "588000"]:
         rows = con.execute(
-            """SELECT date, open, close, high, low, shares, adjust_factor FROM etf_daily
+            """SELECT date, open, close, high, low, shares FROM etf_daily
                WHERE code=? AND date<=? AND close IS NOT NULL ORDER BY date""",
             (code, date)).fetchall()
         if len(rows) < 60:
             continue
         dts, kline, flow_bar, split_flags = [], [], [], []
-        prev_adj = None
+        prev_s = None
         last_px = rows[0]["close"]  # fallback 起点真实收盘
         for r in rows:
             dts.append(r["date"])
@@ -209,15 +217,21 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
             else:
                 last_px = c
                 kline.append([o, c, r["low"], r["high"]])
-            adj = r["shares"] * r["adjust_factor"] if r["shares"] else None
-            if adj is not None and prev_adj is not None:
-                flow_bar.append(round((adj - prev_adj) / 1e8, 2))
-                split_flags.append(abs(r["adjust_factor"] - 1.0) > 1e-9 and r["date"])
+            is_split_day = (code, r["date"]) in split_days
+            if is_split_day:
+                # 折算日: 差分无申赎含义,不画柱,只打标记
+                flow_bar.append(None)
+                split_flags.append(True)
+                prev_s = r["shares"]  # 基准切换到折算后口径
+            elif r["shares"] is not None and prev_s is not None:
+                flow_bar.append(round((r["shares"] - prev_s) / 1e8, 2))
+                split_flags.append(False)
+                prev_s = r["shares"]
             else:
                 flow_bar.append(None)
                 split_flags.append(False)
-            if adj is not None:
-                prev_adj = adj
+                if r["shares"] is not None:
+                    prev_s = r["shares"]
         idx_aligned = [idx_map.get(d) for d in dts]
         detail[code] = {"name": ETF_POOL[code]["name"], "dates": dts, "kline": kline,
                         "flow": flow_bar, "index": idx_aligned, "splits": split_flags}
@@ -239,7 +253,7 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
     # 每日各核心标的 Δ份额×当日真实收盘价 → 总净申购(亿,真实口径)
     # 折算/披露噪声日: 该标的当日份额不参与差分(读侧过滤 invalid_delta)
     daily_sql = (
-        "SELECT date, code, shares*adjust_factor AS s, close FROM etf_daily "
+        "SELECT date, code, shares AS s, close FROM etf_daily "
         "WHERE code IN (%s) AND shares IS NOT NULL AND date<=? ORDER BY date"
         % ",".join("?" * len(CORE_CODES))
     )
@@ -273,11 +287,11 @@ def _fetch_chart_data(con: sqlite3.Connection, date: str) -> dict:
     if landing_anchor:
         for code in CORE_CODES:
             base = con.execute(
-                """SELECT shares*adjust_factor s FROM etf_daily
+                """SELECT shares s FROM etf_daily
                    WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1""",
                 (code, landing_anchor)).fetchone()
             last = con.execute(
-                """SELECT shares*adjust_factor s FROM etf_daily
+                """SELECT shares s FROM etf_daily
                    WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1""",
                 (code, date)).fetchone()
             px = con.execute(

@@ -5,7 +5,10 @@
 1. **口径诚实**：估算值永不冒充真实值；BLOCKED 不降级为 NEUTRAL；null 就是 null
 2. **只降不升**：所有置信度调整方向一致（验证背离/灰灯过多/耗尽闸门/空头封顶）
 3. **可审计**：每个阈值/权重随信号输出；fetch_log 记录数据源健康度
-4. **份额复权**：任何份额分析必须用 `shares * adjust_factor`，原始 shares 只用于存储
+4. **份额口径**：读侧一律用裸 `shares`（raw 披露）；折算/披露噪声日由 `invalid_delta`
+   读侧过滤（join / set 过滤），原始披露值永不修改。`adjust_factor` 复权因子法已废弃
+   （qfq 价格上判定失效曾致真实申购误判为拆分，见 AUDIT-REPORT A1/A2），
+   列保留仅作存储，不再被任何读侧引用
 5. **归因克制**：份额变化只证明大资金申赎；归因国家队 = 官宣 + 季报锚点 + 行为特征三角验证
 6. **严禁 token 泄露**：webhook 走环境变量 `ETF_NTM_FEISHU_WEBHOOK`，代码/日志/报告零暴露
 7. **诊断不动手**：先出方案（潜在收益/改动点/难度）确认再改
@@ -45,7 +48,10 @@ python -m pytest tests/ -q          # 77 用例（pytest 在 Python313 环境,�
 - 全部数据源为日频（份额/K线日度、两融 T+1、锚点季度）；调度=工作日 19:05 一次即可,
   盘中加跑无增益;晚披露靠 `daily_incremental` 近 5 自然日回补追赶
 - 深交所份额接口区间上限约 185 自然日（2026-11-06 实测），collector 已分段处理
-- 510310/510050/512100/563360 历史上有拆分/折算,复权因子已写入
+- 510310/510050/512100/563360 等历史上有拆分/折算，由 `core/splits.py` 资产守恒法识别
+  （`repair_existing` 幂等重建 share_splits/invalid_delta，rebuild/daily 已内置）；
+  存量库迁移用 `python cli.py repair`（清洗 + adjust_factor 复位）
+- 512100 2020-06-10 份额 ×0.72 待人工核对定性（无拆分公告实锤，classify_jump 判 real 不处理）
 - 指数成交额：上证 sh000001 + 深成 sz399001 合计近似两市
 - margin_daily 已接数据源（2022-11 起,~954 行），L5 融资杠杆灯正常工作；
   `_margin_chg` 读取 `fin_balance_yi` 列（表缺失时优雅降级灰灯）

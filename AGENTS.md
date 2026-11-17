@@ -32,7 +32,7 @@ cli.py   仅组装
 
 ```bash
 python cli.py rebuild && python cli.py report && python cli.py calibrate && python cli.py backtest && python cli.py events
-python -m pytest tests/ -q          # 77 用例（pytest 在 Python313 环境,非默认 python）
+python -m pytest tests/ -q          # 93 用例（默认 python 3.13 即可,无需切环境）
 ```
 
 ## 信号表与热力图
@@ -47,6 +47,9 @@ python -m pytest tests/ -q          # 77 用例（pytest 在 Python313 环境,�
 
 - 全部数据源为日频（份额/K线日度、两融 T+1、锚点季度）；调度=工作日 19:05 一次即可,
   盘中加跑无增益;晚披露靠 `daily_incremental` 近 5 自然日回补追赶
+- **日历自愈**：`daily_incremental` 每次 K 线拉新后自动 `rebuild_calendar`——
+  calendar 停在旧日期会使 `trading_days` 返回空、沪市份额静默停采
+  （2026-11-17 实测踩坑,本地库曾因此停摆近两周）
 - 深交所份额接口区间上限约 185 自然日（2026-11-06 实测），collector 已分段处理
 - 510310/510050/512100/563360 等历史上有拆分/折算，由 `core/splits.py` 资产守恒法识别
   （`repair_existing` 幂等重建 share_splits/invalid_delta，rebuild/daily 已内置）；

@@ -72,12 +72,15 @@ def seed_known_events(con: sqlite3.Connection) -> int:
 
 
 def event_window_path(con: sqlite3.Connection, event_date: str, code: str, pre: int = 5, post: int = 20) -> dict:
-    """事件窗口 [pre, post] 的份额路径与价格路径。"""
+    """事件窗口 [pre, post] 的份额路径与价格路径。
+    折算/披露噪声日（invalid_delta）剔除——否则跨折算日的 shares_indexed
+    会出现机械跳变（如 510310 2024-09-20 折算 ×2.05 会被读成份额倍增）。"""
     rows = con.execute(
         """SELECT date, shares AS shares_adj, close FROM etf_daily
            WHERE code=? AND shares IS NOT NULL AND date>=date(?, '-30 day') AND date<=date(?, '+40 day')
+             AND date NOT IN (SELECT date FROM invalid_delta WHERE code=?)
            ORDER BY date""",
-        (code, event_date, event_date),
+        (code, event_date, event_date, code),
     ).fetchall()
     dates = [r["date"] for r in rows]
     if event_date not in dates:
@@ -104,10 +107,11 @@ def run_event_study(con: sqlite3.Connection) -> dict:
         study = {"name": ev["name"], "date": ev["event_date"], "etype": ev["etype"], "paths": {}}
         for code in ["510300", "510050", "512100", "588000"]:
             study["paths"][code] = event_window_path(con, ev["event_date"], code)
-        # 事件后5日核心层合计份额变化
+        # 事件后5日核心层合计份额变化（折算/噪声日同样剔除）
         rows = con.execute(
             """SELECT date, SUM(shares) t FROM etf_daily
                WHERE code IN (%s) AND shares IS NOT NULL AND date BETWEEN date(?, '-7 day') AND date(?, '+7 day')
+                 AND (code, date) NOT IN (SELECT code, date FROM invalid_delta)
                GROUP BY date ORDER BY date""" % ",".join("?" * len(CORE_CODES)),
             (*CORE_CODES, ev["event_date"], ev["event_date"]),
         ).fetchall()

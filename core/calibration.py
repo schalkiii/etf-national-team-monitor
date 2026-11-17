@@ -48,10 +48,13 @@ def nt_holding_by_period(con: sqlite3.Connection, code: str) -> dict[str, float]
 
 
 def total_shares_at(con: sqlite3.Connection, code: str, date: str) -> float | None:
-    """date 当日或之前最近一日总份额（亿份,raw 披露口径;折算日差分由读侧过滤）。"""
+    """date 当日或之前最近一日总份额（亿份,raw 披露口径;折算/噪声日剔除）。"""
     r = con.execute(
-        "SELECT shares FROM etf_daily WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 1",
-        (code, date),
+        """SELECT shares FROM etf_daily
+           WHERE code=? AND shares IS NOT NULL AND date<=?
+             AND date NOT IN (SELECT date FROM invalid_delta WHERE code=?)
+           ORDER BY date DESC LIMIT 1""",
+        (code, date, code),
     ).fetchone()
     if not r:
         return None
@@ -108,8 +111,10 @@ def calibrated_daily_flow(con: sqlite3.Connection, code: str, date: str) -> dict
     theta, theta_period = latest_valid_theta(con, code)
     rows = con.execute(
         """SELECT date, shares, close FROM etf_daily
-           WHERE code=? AND shares IS NOT NULL AND date<=? ORDER BY date DESC LIMIT 2""",
-        (code, date),
+           WHERE code=? AND shares IS NOT NULL AND date<=?
+             AND date NOT IN (SELECT date FROM invalid_delta WHERE code=?)
+           ORDER BY date DESC LIMIT 2""",
+        (code, date, code),
     ).fetchall()
     if theta is None or len(rows) < 2:
         return {"code": code, "date": date, "nt_flow_yi": None, "flow_source": None,

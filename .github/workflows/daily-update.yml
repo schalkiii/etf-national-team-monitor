@@ -103,15 +103,17 @@ jobs:
         if: always()
         run: |
           test -s data/etf_ntm.db || { echo "无 DB 可推,跳过"; exit 0; }
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           cd data
           git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -q -b data-snapshot
           git add etf_ntm.db
           # 推送翻转状态一并持久化（可能不存在:webhook 未配置时）
           test -f last_signal_state.json && git add last_signal_state.json || true
-          git commit -q -m "db snapshot $(date -u +%F)" || exit 0
+          # 无暂存变化(内容级)则跳过提交与推送,避免空 commit
+          git diff --cached --quiet && { echo "DB 快照无变化,跳过推送"; exit 0; }
+          git commit -q -m "db snapshot $(date -u +%F)"
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -q origin HEAD:data-snapshot --force
         env:

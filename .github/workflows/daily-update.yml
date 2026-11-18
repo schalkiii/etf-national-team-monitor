@@ -1,0 +1,118 @@
+name: Daily update and deploy
+
+# 定时自动更新 github.io 静态部署：
+#   增量采集 → 信号/报告 → site 同步 → Pages 部署 → DB 快照回推
+# DB 跨 run 持久化：data-snapshot 分支存 etf_ntm.db 快照
+#（孤儿分支 force-push 单 commit,无历史膨胀;首个快照由本地推种子库）。
+# 注：GITHUB_TOKEN 的 push 不会触发其他 workflow,故 Pages 部署在本 workflow 内完成。
+on:
+  schedule:
+    # 北京时间周一~周六 19:15（UTC 11:15）
+    # 周六兜底：覆盖周五晚才披露的沪市份额（T+1 披露当晚可能未采集到）
+    - cron: "15 11 * * 1-6"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "daily-update"
+  cancel-in-progress: false
+
+env:
+  ETF_NTM_HOME: ${{ github.workspace }}/data
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore DB snapshot
+        run: |
+          mkdir -p data
+          if git ls-remote --exit-code --heads origin data-snapshot >/dev/null 2>&1; then
+            git fetch --depth=1 origin data-snapshot
+            git show origin/data-snapshot:etf_ntm.db > data/etf_ntm.db
+            # 推送翻转状态文件（丢失会导致飞书重复推送）
+            git show origin/data-snapshot:last_signal_state.json > data/last_signal_state.json 2>/dev/null \
+              || echo "::warning::快照无 last_signal_state.json,首推将视为初始状态"
+            echo "DB snapshot restored: $(du -h data/etf_ntm.db | cut -f1)"
+          else
+            echo "::warning::data-snapshot 分支不存在,首次运行将执行全量 bootstrap"
+          fi
+
+      - name: Run daily update (fetch + signals + report)
+        run: |
+          if [ ! -s data/etf_ntm.db ]; then
+            echo "::notice::执行全量 bootstrap (rebuild)..."
+            python cli.py rebuild && python cli.py backfill-signals --days 400 && python cli.py report
+          else
+            python scripts/daily_job.py
+          fi
+
+      - name: Sync report to site
+        run: |
+          latest=$(ls -t "$ETF_NTM_HOME"/reports/etf_ntm_*.html | head -1)
+          test -n "$latest" || { echo "::error::未找到报告文件"; exit 1; }
+          cp "$latest" site/index.html
+          echo "snapshot: $(basename "$latest")"
+          if git diff --quiet site/index.html; then
+            echo "SITE_CHANGED=no" >> "$GITHUB_ENV"
+            echo "site 快照无变化,跳过部署与提交"
+          else
+            echo "SITE_CHANGED=yes" >> "$GITHUB_ENV"
+          fi
+
+      - name: Commit site snapshot to main
+        if: env.SITE_CHANGED == 'yes'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site/index.html
+          git commit -m "chore(ci): daily snapshot $(date -u +%F) [skip ci]" || exit 0
+          git push origin HEAD:main
+
+      - name: Configure Pages
+        if: env.SITE_CHANGED == 'yes'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: env.SITE_CHANGED == 'yes'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy Pages
+        if: env.SITE_CHANGED == 'yes'
+        uses: actions/deploy-pages@v4
+
+      - name: Push DB snapshot
+        if: always()
+        run: |
+          test -s data/etf_ntm.db || { echo "无 DB 可推,跳过"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          cd data
+          git init -q
+          git checkout -q -b data-snapshot
+          git add etf_ntm.db
+          # 推送翻转状态一并持久化（可能不存在:webhook 未配置时）
+          test -f last_signal_state.json && git add last_signal_state.json || true
+          git commit -q -m "db snapshot $(date -u +%F)" || exit 0
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -q origin HEAD:data-snapshot --force
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

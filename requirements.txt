@@ -1,0 +1,2 @@
+# 运行时依赖（本地与 CI 共用）。pandas 由 akshare 传递依赖带入。
+akshare>=1.14

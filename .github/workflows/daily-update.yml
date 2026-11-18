@@ -103,10 +103,11 @@ jobs:
         if: always()
         run: |
           test -s data/etf_ntm.db || { echo "无 DB 可推,跳过"; exit 0; }
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           cd data
           git init -q
+          # 注意: config 必须在 cd data 之后（data/ 是独立 init 的仓库,不继承主仓库配置）
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -q -b data-snapshot
           git add etf_ntm.db
           # 推送翻转状态一并持久化（可能不存在:webhook 未配置时）

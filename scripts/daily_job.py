@@ -14,6 +14,15 @@ sys.path.insert(0, str(ROOT))
 from store.db import connect, init_db  # noqa: E402
 
 
+def _should_fail_fetch(inc: dict) -> bool:
+    """采集失败判定：仅当所有数据源全灭才 fail。
+    2026-11-20/21 教训：akshare 份额/融资因 CI runner 出口 IP 限流偶发全空,
+    K线正常却导致整条链中断、报告不部署。单点失败应降级告警而非阻断。"""
+    return (inc.get("klines", 0) == 0
+            and inc.get("share_rows", 0) == 0
+            and inc.get("margin_rows", 0) == 0)
+
+
 def main() -> int:
     con = connect()
     init_db(con)
@@ -26,8 +35,12 @@ def main() -> int:
     print(f"report: {result.get('report')}")
     if result.get("blocked_all"):
         return 2
-    if inc.get("share_rows", 0) == 0:
+    if _should_fail_fetch(inc):
+        print("[daily_job] ERROR: K线/份额/融资全部采集失败,退出码 1", file=sys.stderr, flush=True)
         return 1
+    if inc.get("share_rows", 0) == 0:
+        print("[daily_job] WARNING: 份额采集为空(非交易日/接口降级),报告基于已有数据继续",
+              file=sys.stderr, flush=True)
     return 0
 
 

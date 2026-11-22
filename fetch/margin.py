@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from fetch.sources import _retry_call, _warn
 from store.db import log_fetch
 
 
@@ -18,32 +19,32 @@ def _norm_date(d: str) -> str:
 
 def fetch_margin_sse(start: str, end: str) -> list[dict]:
     """上交所融资余额区间。start/end: 'YYYYMMDD'。返回 [{date, fin_balance_yi, loan_balance_yi}]。"""
-    try:
-        import akshare as ak
-        df = ak.stock_margin_sse(start_date=start, end_date=end)
-        if df is None or df.empty or "融资余额" not in df.columns:
-            return []
-        rows = []
-        for _, row in df.iterrows():
-            date = _norm_date(row["信用交易日期"])
-            try:
-                fin = float(row.get("融资余额"))
-            except (TypeError, ValueError):
-                continue
-            # akshare stock_margin_sse 融资余额单位为「元」,统一换算为「亿」入库
-            if fin > 1e9:  # >10亿说明原始单位是元（万亿级数据 1e12）
-                fin /= 1e8
-            try:
-                loan = float(row.get("融券余量金额"))
-            except (TypeError, ValueError):
-                loan = None
-            else:
-                if loan and loan > 1e9:
-                    loan /= 1e8
-            rows.append({"date": date, "fin_balance_yi": fin, "loan_balance_yi": loan, "source": "sse"})
-        return sorted(rows, key=lambda r: r["date"])
-    except Exception:
+    df = _retry_call(
+        lambda s, e: __import__("akshare").stock_margin_sse(start_date=s, end_date=e), start, end
+    )
+    if df is None or df.empty or "融资余额" not in df.columns:
+        if df is not None and df.empty:
+            _warn(f"fetch_margin_sse({start}-{end}) 返回空 DataFrame")
         return []
+    rows = []
+    for _, row in df.iterrows():
+        date = _norm_date(row["信用交易日期"])
+        try:
+            fin = float(row.get("融资余额"))
+        except (TypeError, ValueError):
+            continue
+        # akshare stock_margin_sse 融资余额单位为「元」,统一换算为「亿」入库
+        if fin > 1e9:  # >10亿说明原始单位是元（万亿级数据 1e12）
+            fin /= 1e8
+        try:
+            loan = float(row.get("融券余量金额"))
+        except (TypeError, ValueError):
+            loan = None
+        else:
+            if loan and loan > 1e9:
+                loan /= 1e8
+        rows.append({"date": date, "fin_balance_yi": fin, "loan_balance_yi": loan, "source": "sse"})
+    return sorted(rows, key=lambda r: r["date"])
 
 
 def fetch_margin_szse(date_q: str) -> list[dict]:

@@ -83,7 +83,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add site/index.html
           git commit -m "chore(ci): daily snapshot $(date -u +%F) [skip ci]" || exit 0
-          git push origin HEAD:main
+          # push 被拒(远端有新 commit,如重跑/并发场景)时 rebase 重试一次
+          if ! git push origin HEAD:main 2>&1; then
+            echo "::warning::push 被拒,rebase 远端后重试"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
 
       - name: Configure Pages
         if: env.SITE_CHANGED == 'yes'

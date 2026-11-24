@@ -100,6 +100,24 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
+          retention-days: 7
+
+      - name: Wait for artifact visibility
+        # artifact API 存在最终一致性延迟: upload 刚 finalize 时列表查询可能返回 0,
+        # 导致 deploy-pages 报 "No artifacts named github-pages"。轮询直至可见。
+        if: env.SITE_CHANGED == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 30); do
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts"                  --jq '.artifacts[]? | select(.name == "github-pages") | .id' | grep -q .; then
+              echo "github-pages artifact 可见(第 ${i} 次轮询)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::60s 内 artifact 仍未可见"
+          exit 1
 
       - name: Deploy Pages
         if: env.SITE_CHANGED == 'yes'

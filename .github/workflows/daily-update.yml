@@ -133,8 +133,7 @@ jobs:
         if: env.SITE_CHANGED == 'yes'
         uses: Wandalen/wretry.action@master
         with:
-          action: actions/deploy-pages
-          version: v4
+          action: actions/deploy-pages@v4
           attempt_limit: 4
           attempt_delay: 20000  # 每次重试间隔 20s
           with: |

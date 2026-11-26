@@ -119,9 +119,18 @@ jobs:
           echo "::error::60s 内 artifact 仍未可见"
           exit 1
 
-      - name: Deploy Pages
+      - name: Deploy Pages (with retry)
+        # deploy-pages 内部 getArtifactMetadata 偶发 5xx(列表 API 可见但 metadata 端点抖动),
+        # 已 3 次导致 run 失败(45281498989/45311159365/45695243598)。改用 action 打点重试。
         if: env.SITE_CHANGED == 'yes'
-        uses: actions/deploy-pages@v4
+        uses: Wandalen/wretry.action@master
+        with:
+          action: actions/deploy-pages
+          version: v4
+          attempt_limit: 4
+          attempt_delay: 20000  # 每次重试间隔 20s
+          with: |
+            token: ${{ github.token }}
 
       - name: Push DB snapshot
         if: always()

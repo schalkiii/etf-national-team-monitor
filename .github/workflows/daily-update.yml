@@ -83,11 +83,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add site/index.html
           git commit -m "chore(ci): daily snapshot $(date -u +%F) [skip ci]" || exit 0
-          # push 被拒(远端有新 commit,如重跑/并发场景)时 rebase 重试一次
+          # push 被拒(远端有新 commit,如重跑/并发场景)时,基于最新远端重建提交。
+          # 不用 rebase: 重跑场景下新旧 run 产生同日同内容快照 commit,rebase 必然冲突
+          # (45695243598 重跑实测)。reset --soft 重提交模式天然无冲突。
           if ! git push origin HEAD:main 2>&1; then
-            echo "::warning::push 被拒,rebase 远端后重试"
+            echo "::warning::push 被拒,基于最新远端重建快照提交"
             git fetch origin main
-            git rebase origin/main
+            git reset --soft origin/main
+            git add site/index.html
+            if git diff --cached --quiet; then
+              echo "site 快照与远端一致(重跑场景),无需再推"
+              exit 0
+            fi
+            git commit -m "chore(ci): daily snapshot $(date -u +%F) [skip ci]"
             git push origin HEAD:main
           fi
 
